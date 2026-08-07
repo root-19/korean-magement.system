@@ -49,6 +49,18 @@ class ImportLegacyData extends Command
 
     protected $description = 'Import users, schedules, attendance and reports from the legacy schema';
 
+    /**
+     * Everything this command writes to, in truncation order (children first).
+     *
+     * Also the list the same-database check compares the legacy source tables
+     * against: what makes an import unsafe is a table appearing in both.
+     */
+    private const TARGET_TABLES = [
+        'audit_logs', 'session_reports', 'class_sessions', 'payouts', 'bookings',
+        'instructor_availabilities', 'student_schedules', 'student_profiles',
+        'instructor_profiles', 'users',
+    ];
+
     /** Legacy user id => new user id. */
     private array $userMap = [];
 
@@ -141,7 +153,7 @@ class ImportLegacyData extends Command
      */
     private function importUsers($legacy): void
     {
-        $rows = $legacy->table('users')->orderBy('id')->get();
+        $rows = $legacy->table($this->src('users'))->orderBy('id')->get();
         $count = 0;
 
         foreach ($rows as $row) {
@@ -166,9 +178,12 @@ class ImportLegacyData extends Command
                     'birthday' => $this->date($row->birthday ?? null),
                     'avatar_path' => $row->profile_image ?: null,
                     'is_active' => ($row->status ?? 'active') === 'active',
-                    'created_at' => $row->created_at ?: now(),
-                    'updated_at' => $row->updated_at ?: now(),
-                    'deleted_at' => $row->deleted_at ?: null,
+                    // Coalesced, not assumed: the live legacy `users` has
+                    // created_at but neither updated_at nor deleted_at, and a
+                    // bare -> on a missing column is a fatal, not a null.
+                    'created_at' => ($row->created_at ?? null) ?: now(),
+                    'updated_at' => ($row->updated_at ?? null) ?: now(),
+                    'deleted_at' => ($row->deleted_at ?? null) ?: null,
                 ]
             );
 
@@ -191,7 +206,7 @@ class ImportLegacyData extends Command
 
         // The legacy instructor_profiles table, where it exists.
         if ($this->legacyHasTable($legacy, 'instructor_profiles')) {
-            foreach ($legacy->table('instructor_profiles')->get() as $row) {
+            foreach ($legacy->table($this->src('instructor_profiles'))->get() as $row) {
                 $userId = $this->userMap[(int) $row->user_id] ?? null;
 
                 if ($userId === null) {
@@ -211,7 +226,7 @@ class ImportLegacyData extends Command
                         'voice_intro_path' => $row->voice_intro ?: ($row->intro_voice ?? null) ?: null,
                         'credential_paths' => $credentials === [] ? null : json_encode($credentials),
                         'created_at' => $row->created_at ?: now(),
-                        'updated_at' => $row->updated_at ?: now(),
+                        'updated_at' => ($row->updated_at ?? null) ?: now(),
                     ]
                 );
                 $count++;
@@ -219,7 +234,7 @@ class ImportLegacyData extends Command
         }
 
         // bank_name lived on the users god-table; fold it in.
-        foreach ($legacy->table('users')->where('role', 'instructor')->get() as $row) {
+        foreach ($legacy->table($this->src('users'))->where('role', 'instructor')->get() as $row) {
             $userId = $this->userMap[(int) $row->id] ?? null;
 
             if ($userId === null || empty($row->bank_name)) {
@@ -250,7 +265,7 @@ class ImportLegacyData extends Command
 
         $count = 0;
 
-        foreach ($legacy->table('users')->where('role', 'user')->get() as $row) {
+        foreach ($legacy->table($this->src('users'))->where('role', 'user')->get() as $row) {
             $userId = $this->userMap[(int) $row->id] ?? null;
 
             if ($userId === null) {
@@ -281,7 +296,7 @@ class ImportLegacyData extends Command
                     'start_date' => $this->date($row->start_date ?? null),
                     'end_date' => $this->date($row->end_date ?? null),
                     'created_at' => $row->created_at ?: now(),
-                    'updated_at' => $row->updated_at ?: now(),
+                    'updated_at' => ($row->updated_at ?? null) ?: now(),
                 ]
             );
             $count++;
@@ -310,7 +325,7 @@ class ImportLegacyData extends Command
         $inserted = 0;
         $skippedNoTime = 0;
 
-        foreach ($legacy->table('users')->where('role', 'user')->get() as $row) {
+        foreach ($legacy->table($this->src('users'))->where('role', 'user')->get() as $row) {
             $userId = $this->userMap[(int) $row->id] ?? null;
 
             if ($userId === null) {
@@ -403,7 +418,7 @@ class ImportLegacyData extends Command
         // real class. Applied here so the earnings query never has to.
         $activeKeys = $this->activeSessionKeys($legacy, $prefix);
 
-        foreach ($legacy->table('teacher_presence')->orderBy('id')->cursor() as $row) {
+        foreach ($legacy->table($this->src('teacher_presence'))->orderBy('id')->cursor() as $row) {
             $instructorId = $this->userMap[(int) $row->teacher_id] ?? null;
             $studentId = $this->resolveStudentId($row);
 
@@ -415,7 +430,7 @@ class ImportLegacyData extends Command
 
             // Unpack the early-class marker.
             $heldDate = null;
-            $reason = $row->postpone_reason;
+            $reason = $row->postpone_reason ?? null;
 
             if (is_string($reason) && str_starts_with($reason, $prefix)) {
                 $parsed = $this->date(substr($reason, -10));
@@ -482,10 +497,10 @@ class ImportLegacyData extends Command
                     'absent_by' => $absentBy?->value,
                     'postponed_by' => $postponedBy?->value,
                     'postpone_reason' => $reason ?: null,
-                    'makeup_time' => $row->makeup_time ?: null,
-                    'rescheduled_time' => $row->rescheduled_time ?: null,
+                    'makeup_time' => ($row->makeup_time ?? null) ?: null,
+                    'rescheduled_time' => ($row->rescheduled_time ?? null) ?: null,
                     'created_at' => $row->created_at ?: now(),
-                    'updated_at' => $row->updated_at ?: now(),
+                    'updated_at' => ($row->updated_at ?? null) ?: now(),
                 ]
             );
 
@@ -529,7 +544,7 @@ class ImportLegacyData extends Command
      */
     private function restoreDeletedStudents($legacy): int
     {
-        $snapshots = $legacy->table('teacher_presence')
+        $snapshots = $legacy->table($this->src('teacher_presence'))
             ->where('student_id', '<=', 0)
             ->whereNotNull('student_username')
             ->where('student_username', '<>', '')
@@ -662,17 +677,27 @@ class ImportLegacyData extends Command
     {
         $keys = [];
 
-        $rows = $legacy->table('teacher_presence as tp')
-            ->join('users as u', 'u.id', '=', 'tp.student_id')
+        // `postpone_reason` carries the legacy early-class date, but not every
+        // legacy install has the column. Selecting it blindly is a SQL error, so
+        // it is only asked for when it is there; without it there is simply no
+        // early class to detect.
+        $columns = ['tp.teacher_id', 'tp.date', 'u.username'];
+
+        if ($this->legacyHasColumn($legacy, 'teacher_presence', 'postpone_reason')) {
+            $columns[] = 'tp.postpone_reason';
+        }
+
+        $rows = $legacy->table($this->src('teacher_presence', 'tp'))
+            ->join($this->src('users', 'u'), 'u.id', '=', 'tp.student_id')
             ->where('tp.student_id', '>', 0)
             ->whereIn('tp.status', SessionStatus::payableValues())
-            ->select('tp.teacher_id', 'tp.date', 'tp.postpone_reason', 'u.username')
+            ->select($columns)
             ->get();
 
         foreach ($rows as $row) {
             $paid = $this->date($row->date);
 
-            if (is_string($row->postpone_reason) && str_starts_with($row->postpone_reason, $prefix)) {
+            if (is_string($row->postpone_reason ?? null) && str_starts_with($row->postpone_reason, $prefix)) {
                 $paid = $this->date(substr($row->postpone_reason, -10)) ?? $paid;
             }
 
@@ -698,7 +723,7 @@ class ImportLegacyData extends Command
             $sessionIds[$s->instructor_id.'|'.$s->student_id.'|'.$s->paid_date] = $s->id;
         }
 
-        foreach ($legacy->table('feedback')->orderBy('id')->cursor() as $row) {
+        foreach ($legacy->table($this->src('feedback'))->orderBy('id')->cursor() as $row) {
             $instructorId = $this->userMap[(int) $row->instructor_id] ?? null;
             $studentId = $this->userMap[(int) $row->student_id] ?? null;
 
@@ -767,7 +792,7 @@ class ImportLegacyData extends Command
 
         $count = 0;
 
-        foreach ($legacy->table('teacher_schedules')->get() as $row) {
+        foreach ($legacy->table($this->src('teacher_schedules'))->get() as $row) {
             $instructorId = $this->userMap[(int) $row->instructor_id] ?? null;
             $isoDay = StudentSchedule::isoDayFromName((string) $row->day_of_week);
 
@@ -785,7 +810,7 @@ class ImportLegacyData extends Command
                 [
                     'is_available' => ($row->status ?? 'available') === 'available',
                     'created_at' => $row->created_at ?: now(),
-                    'updated_at' => $row->updated_at ?: now(),
+                    'updated_at' => ($row->updated_at ?? null) ?: now(),
                 ]
             );
             $count++;
@@ -803,7 +828,7 @@ class ImportLegacyData extends Command
 
         $count = 0;
 
-        foreach ($legacy->table('audit_log')->orderBy('id')->cursor() as $row) {
+        foreach ($legacy->table($this->src('audit_log'))->orderBy('id')->cursor() as $row) {
             $userId = $this->userMap[(int) $row->user_id] ?? null;
 
             // target_table + target_id become a polymorphic reference.
@@ -852,21 +877,38 @@ class ImportLegacyData extends Command
     {
         $target = DB::connection();
 
-        $same = $this->fingerprint($legacy) === $this->fingerprint($target);
-
-        if (! $same) {
+        if ($this->fingerprint($legacy) !== $this->fingerprint($target)) {
             return true;
         }
 
-        $this->error('Source and target are the same database — refusing to run.');
+        // One database is legitimate after an in-place cutover: the legacy
+        // tables were RENAMED clear (database/schema/production_cutover.sql) so
+        // the modern schema could take their names. What makes an import unsafe
+        // is not the database name, it is a table being both a source and a
+        // target -- where --fresh would truncate the very rows being read. So
+        // check for that overlap instead.
+        $sources = array_values(config('academy.legacy_tables', []));
+        $overlap = array_intersect($sources, self::TARGET_TABLES);
+
+        if ($overlap === []) {
+            $this->warn('Source and target are one database: '.$this->describe($target));
+            $this->line('  Legacy tables are renamed clear of the modern ones, so this is safe.');
+            $this->line('  Reading from: '.implode(', ', $sources));
+            $this->newLine();
+
+            return true;
+        }
+
+        $this->error('Source and target are the same database, and the same tables.');
         $this->newLine();
         $this->line('  Both resolve to: '.$this->describe($target));
+        $this->line('  Read AND written: '.implode(', ', $overlap));
         $this->newLine();
-        $this->line('  DB_*        must point at this app\'s OWN database (the new schema).');
-        $this->line('  LEGACY_DB_* must point at the OLD native-PHP database (read-only).');
+        $this->line('  Either point LEGACY_DB_* at a separate database, or rename the legacy');
+        $this->line('  tables clear and set LEGACY_TABLE_PREFIX -- see');
+        $this->line('  database/schema/production_cutover.sql.');
         $this->newLine();
-        $this->warn('  If DB_* is pointed at production: production runs the legacy schema,');
-        $this->warn('  so the app cannot use it directly, and --fresh would truncate it.');
+        $this->warn('  As it stands, --fresh would truncate the rows being imported.');
 
         return false;
     }
@@ -900,11 +942,7 @@ class ImportLegacyData extends Command
     {
         Schema::disableForeignKeyConstraints();
 
-        foreach ([
-            'audit_logs', 'session_reports', 'class_sessions', 'payouts', 'bookings',
-            'instructor_availabilities', 'student_schedules', 'student_profiles',
-            'instructor_profiles', 'users',
-        ] as $table) {
+        foreach (self::TARGET_TABLES as $table) {
             DB::table($table)->truncate();
         }
 
@@ -925,7 +963,7 @@ class ImportLegacyData extends Command
     private function legacyHasColumn($legacy, string $table, string $column): bool
     {
         try {
-            return $legacy->getSchemaBuilder()->hasColumn($table, $column);
+            return $legacy->getSchemaBuilder()->hasColumn($this->src($table), $column);
         } catch (\Throwable) {
             return false;
         }
@@ -957,6 +995,23 @@ class ImportLegacyData extends Command
     }
 
     /** Scores are stored 1-10; anything outside that is dropped, not clamped. */
+    /**
+     * The name of a legacy source table.
+     *
+     * Normally the legacy name on a separate database. After an in-place
+     * cutover both connections point at one database and the two legacy tables
+     * whose names the modern schema needs — `users` and `instructor_profiles` —
+     * have been RENAMED (never dropped) to legacy_*. This resolves either
+     * layout from config, so the importer does not care which one it is looking
+     * at. See config/academy.php.
+     */
+    private function src(string $table, ?string $alias = null): string
+    {
+        $name = config("academy.legacy_tables.{$table}", $table);
+
+        return $alias === null ? $name : "{$name} as {$alias}";
+    }
+
     private function score(mixed $value): ?int
     {
         if ($value === null || $value === '') {

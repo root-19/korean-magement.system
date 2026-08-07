@@ -81,4 +81,32 @@ return [
 
     'learning_times' => [20, 25, 30, 45, 60],
 
+    /*
+    |--------------------------------------------------------------------------
+    | Legacy source tables
+    |--------------------------------------------------------------------------
+    |
+    | Where legacy:import reads from. Normally the legacy names, on a separate
+    | LEGACY_DB_* connection.
+    |
+    | After an in-place cutover both connections point at ONE database, and the
+    | legacy `users` / `instructor_profiles` have been renamed out of the way so
+    | the modern tables can take those names. Set LEGACY_TABLE_PREFIX=legacy_ and
+    | the importer follows them.
+    |
+    */
+
+    'legacy_tables' => [
+        'users' => env('LEGACY_TABLE_PREFIX', '').'users',
+        'instructor_profiles' => env('LEGACY_TABLE_PREFIX', '').'instructor_profiles',
+
+        // These never collide with a modern table name, so they keep theirs:
+        // audit_log (modern is audit_logs), feedback (session_reports),
+        // teacher_presence (class_sessions), teacher_schedules (student_schedules).
+        'feedback' => 'feedback',
+        'teacher_presence' => 'teacher_presence',
+        'teacher_schedules' => 'teacher_schedules',
+        'audit_log' => 'audit_log',
+    ],
+
 ];
