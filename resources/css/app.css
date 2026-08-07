@@ -1,0 +1,419 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/*
+ * The app is dark only, matching the legacy views — every one of them opened
+ * with `<body class="bg-gray-900">`. There is no light theme and no toggle, so
+ * these component classes carry a single set of colours rather than a
+ * light/dark pair.
+ *
+ * Palette, taken from the legacy sidebars and dashboards:
+ *   page          gray-900
+ *   sidebar/panel gray-800 (panels use a gray-800 -> gray-900 gradient)
+ *   borders       gray-700
+ *   headings      yellow-400   (brand-400)
+ *   nav hover     orange-400   (accent-400)
+ *   primary btn   yellow-400 background, gray-900 text
+ */
+
+@layer base {
+    html {
+        -webkit-text-size-adjust: 100%;
+    }
+
+    body {
+        @apply bg-gray-900 text-gray-200 antialiased;
+    }
+
+    /* Tabular figures wherever numbers are compared down a column. */
+    .numeric,
+    td.numeric,
+    th.numeric {
+        font-variant-numeric: tabular-nums;
+    }
+
+    [x-cloak] {
+        display: none !important;
+    }
+
+    /* The legacy pages set this on <select> options implicitly via the browser;
+       stated here so dropdowns are not white-on-white on Windows. */
+    option {
+        @apply bg-gray-800 text-gray-100;
+    }
+}
+
+@layer components {
+    /* ---- Focus ring -------------------------------------------------------
+       One definition so every interactive element is keyboard-visible the same
+       way. Offset against gray-900, the page colour. */
+    .focus-ring {
+        @apply focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-400 focus-visible:ring-offset-2 focus-visible:ring-offset-gray-900;
+    }
+
+    /* ---- Buttons ---------------------------------------------------------
+       Primary is the legacy `bg-yellow-400 text-gray-900` pairing used by the
+       dashboard tour button and the sidebar toggle. */
+    .btn {
+        @apply focus-ring inline-flex items-center justify-center gap-2 rounded-lg px-4 py-2 text-sm font-semibold transition disabled:cursor-not-allowed disabled:opacity-50;
+    }
+
+    .btn-primary {
+        @apply btn bg-brand-400 text-gray-900 shadow-lg hover:bg-brand-300 active:bg-brand-500;
+    }
+
+    .btn-secondary {
+        @apply btn border border-gray-600 bg-gray-800 text-gray-200 hover:border-gray-500 hover:bg-gray-700;
+    }
+
+    .btn-danger {
+        @apply btn bg-danger-600 text-white hover:bg-danger-500;
+    }
+
+    .btn-ghost {
+        @apply btn text-gray-300 hover:bg-gray-700 hover:text-brand-400;
+    }
+
+    .btn-sm {
+        @apply px-2.5 py-1.5 text-xs;
+    }
+
+    /* ---- Form controls --------------------------------------------------- */
+    .form-input,
+    .form-select,
+    .form-textarea {
+        @apply w-full rounded-lg border-gray-600 bg-gray-900 text-sm text-gray-100 shadow-sm placeholder:text-gray-500 focus:border-brand-400 focus:ring-brand-400 disabled:bg-gray-800 disabled:text-gray-500;
+    }
+
+    .form-label {
+        @apply mb-1.5 block text-sm font-medium text-gray-300;
+    }
+
+    /* @tailwindcss/forms resets radios to unstyled; this is the dark-panel look. */
+    .form-radio {
+        @apply h-4 w-4 shrink-0 border-gray-600 bg-gray-900 text-brand-500 focus:ring-2 focus:ring-brand-400 focus:ring-offset-0;
+    }
+
+    /* ---- Class report form -----------------------------------------------
+       The report keeps its own look, carried over from the legacy feedback
+       page: white fields on dark panels, and the field name as a coloured pill
+       to the left instead of a label above. Instructors fill this in every day
+       and know it by shape, so it is deliberately not restyled to match the
+       rest of the app's forms. */
+    .report-input {
+        @apply w-full rounded border-2 border-transparent bg-white px-3 py-2 text-sm text-gray-900 shadow-sm placeholder:text-gray-400 focus:border-brand-400 focus:ring-0 disabled:bg-gray-300 disabled:text-gray-600;
+    }
+
+    .report-select {
+        @apply w-full rounded border-2 border-transparent bg-brand-100 px-3 py-2 text-center text-sm font-semibold text-gray-900 focus:border-brand-400 focus:ring-0 disabled:bg-gray-300 disabled:text-gray-600;
+    }
+
+    .report-pill {
+        @apply inline-flex shrink-0 items-center rounded px-3 py-2 text-[11px] font-bold uppercase leading-tight tracking-wide;
+    }
+
+    .report-pill-brand {
+        @apply report-pill bg-brand-400 text-gray-900;
+    }
+
+    .report-pill-accent {
+        @apply report-pill bg-accent-400 text-white;
+    }
+
+    .report-row {
+        @apply relative rounded-lg border border-gray-600 p-4 pr-10;
+    }
+
+    .report-remove {
+        @apply absolute right-2 top-2 flex h-6 w-6 items-center justify-center rounded bg-danger-500 text-xs font-bold text-white transition hover:bg-danger-600 disabled:opacity-40;
+    }
+
+    .report-add {
+        @apply inline-flex items-center rounded bg-brand-400 px-3 py-1.5 text-xs font-bold text-gray-900 transition hover:bg-accent-400 hover:text-white disabled:opacity-40;
+    }
+
+    .report-heading {
+        @apply text-xl font-bold text-brand-400;
+    }
+
+    .report-hint {
+        @apply text-sm font-normal italic text-gray-300;
+    }
+
+    .form-error {
+        @apply mt-1.5 text-xs text-danger-400;
+    }
+
+    /* ---- Surfaces --------------------------------------------------------
+       The legacy panels were `bg-gradient-to-br from-gray-800 to-gray-900
+       rounded-2xl shadow-xl`. Kept, as a single class. */
+    .card {
+        @apply rounded-card border border-gray-700/70 bg-gradient-to-br from-gray-800 to-gray-900 shadow-xl;
+    }
+
+    /* Accent banner: legacy `from-yellow-600 to-orange-600`. */
+    .card-accent {
+        @apply rounded-card bg-gradient-to-r from-brand-600 to-accent-600 shadow-xl;
+    }
+
+    /* ---- Badges ----------------------------------------------------------
+       Legacy status pills: `px-3 py-1 rounded-full text-sm bg-<c>-500/20
+       text-<c>-400`. */
+    .badge {
+        @apply inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-xs font-semibold;
+    }
+
+    .badge-success {
+        @apply badge bg-success-500/20 text-success-400;
+    }
+
+    .badge-danger {
+        @apply badge bg-danger-500/20 text-danger-400;
+    }
+
+    .badge-warning {
+        @apply badge bg-warning-500/20 text-warning-400;
+    }
+
+    .badge-neutral {
+        @apply badge bg-gray-600/30 text-gray-400;
+    }
+
+    .badge-brand {
+        @apply badge bg-brand-500/20 text-brand-400;
+    }
+
+    /* ---- Tables ----------------------------------------------------------
+       Always wrapped in .table-wrap so a wide table scrolls itself instead of
+       pushing the page sideways. */
+    .table-wrap {
+        @apply -mx-4 overflow-x-auto sm:mx-0;
+    }
+
+    .table {
+        @apply min-w-full text-sm;
+    }
+
+    .table thead th {
+        @apply whitespace-nowrap border-b border-gray-700 bg-gray-900/60 px-4 py-3 text-left text-xs font-semibold uppercase tracking-wide text-brand-400;
+    }
+
+    .table tbody tr {
+        @apply border-b border-gray-700/50 transition-colors last:border-0 hover:bg-gray-700/40;
+    }
+
+    .table tbody td {
+        @apply px-4 py-3 align-middle;
+    }
+
+    /* ---- Nav -------------------------------------------------------------
+       Legacy: `text-yellow-400 hover:text-orange-400 hover:bg-gray-700`. */
+    .nav-link {
+        @apply focus-ring flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-brand-400 transition hover:bg-gray-700 hover:text-accent-400;
+    }
+
+    /* The legacy sidebars highlighted nothing, so you could not tell which page
+       you were on. The palette is unchanged; only the current item is marked. */
+    .nav-link-active {
+        @apply bg-gray-700/80 text-accent-400;
+    }
+
+    /* ---- Headings --------------------------------------------------------
+       Legacy section headings were `text-2xl font-bold text-yellow-400`. */
+    .heading {
+        @apply font-bold text-brand-400;
+    }
+}
+
+/* ==========================================================================
+   Landing page
+   --------------------------------------------------------------------------
+   Values copied from the inline <style> blocks in public/index.php and
+   public/instructor_profile.php. Scoped under .landing because the hero uses a
+   near-black gradient of its own rather than the app's gray-900.
+   ========================================================================== */
+@layer components {
+    .landing {
+        /* public/index.php: .gradient-bg */
+        background: linear-gradient(135deg, #181818 0%, #232323 100%);
+        @apply text-white;
+    }
+
+    /* public/index.php: .main-orange / .main-yellow */
+    .landing-orange {
+        color: #ff8800;
+    }
+
+    .landing-yellow {
+        color: #ffe600;
+    }
+
+    /* instructor_profile.php: .glass-effect */
+    .landing-glass {
+        background: rgba(255, 255, 255, 0.05);
+        backdrop-filter: blur(10px);
+        border: 1px solid rgba(255, 255, 255, 0.1);
+    }
+
+    /* instructor_profile.php: .gradient-text */
+    .landing-gradient-text {
+        background: linear-gradient(135deg, #fbbf24, #f59e0b);
+        -webkit-background-clip: text;
+        background-clip: text;
+        -webkit-text-fill-color: transparent;
+    }
+
+    /* instructor_profile.php: .fade-in */
+    .landing-fade-in {
+        animation: landing-fade-in 0.6s ease-out both;
+    }
+
+    /* The blinking caret the typewriter paragraph trails. */
+    .landing-caret::after {
+        content: '|';
+        animation: landing-blink 1s infinite;
+    }
+
+    .landing-pill {
+        @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-semibold;
+    }
+}
+
+@keyframes landing-fade-in {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+@keyframes landing-blink {
+    0%,
+    100% {
+        opacity: 1;
+    }
+
+    50% {
+        opacity: 0;
+    }
+}
+
+/* The legacy pages animated regardless of preference; this respects it. */
+@media (prefers-reduced-motion: reduce) {
+    .landing-fade-in,
+    .landing-caret::after,
+    .animate-fadeIn,
+    .animate-fadeInUp {
+        animation: none;
+    }
+}
+
+/* ---- Print ---------------------------------------------------------------
+   A payslip gets printed and handed over, so paper is a real output for the
+   earnings page. The app is dark and full of navigation; neither belongs on it.
+
+   Everything here is plain CSS rather than utilities, so it applies to the
+   markup as it already stands: the pages need only a `no-print` class on the
+   chrome and a `print-only` block for the header that replaces it. */
+.print-only {
+    display: none;
+}
+
+@media print {
+    .no-print {
+        display: none !important;
+    }
+
+    .print-only {
+        display: block !important;
+    }
+
+    /* Ink. The dark theme prints as solid black pages otherwise. */
+    html,
+    body {
+        background: #fff !important;
+        color: #111827 !important;
+    }
+
+    /* The content column is centred inside a sidebar offset that is now gone. */
+    main {
+        max-width: none !important;
+        padding: 0 !important;
+    }
+
+    /* Panels keep their structure, lose the gradient and the shadow, and are
+       not split across a page break. */
+    .card,
+    .card-accent {
+        background: #fff !important;
+        background-image: none !important;
+        border: 1px solid #d1d5db !important;
+        box-shadow: none !important;
+        break-inside: avoid;
+    }
+
+    /* Theme text colours are chosen for a dark background. */
+    [class*='text-white'],
+    [class*='text-gray-1'],
+    [class*='text-gray-2'],
+    [class*='text-gray-3'] {
+        color: #111827 !important;
+    }
+
+    [class*='text-gray-4'],
+    [class*='text-gray-5'] {
+        color: #4b5563 !important;
+    }
+
+    /* Semantic colours stay meaningful, darkened enough to read on white. */
+    [class*='text-brand-'],
+    [class*='text-warning-'] {
+        color: #92400e !important;
+    }
+
+    [class*='text-success-'] {
+        color: #15803d !important;
+    }
+
+    [class*='text-danger-'] {
+        color: #b91c1c !important;
+    }
+
+    /* Badges are tinted translucent fills; on paper they need an outline. */
+    .badge,
+    [class*='badge-'] {
+        background: transparent !important;
+        border: 1px solid #9ca3af !important;
+    }
+
+    /* Long tables carry their header onto each page and do not split a row. */
+    .table-wrap {
+        margin: 0 !important;
+        overflow: visible !important;
+    }
+
+    .table thead {
+        display: table-header-group;
+    }
+
+    .table thead th {
+        border-bottom: 1px solid #9ca3af !important;
+        color: #111827 !important;
+    }
+
+    .table tbody tr {
+        break-inside: avoid;
+        border-color: #e5e7eb !important;
+    }
+
+    /* Nothing on a printed payslip is clickable. */
+    a {
+        text-decoration: none !important;
+        color: inherit !important;
+    }
+}
