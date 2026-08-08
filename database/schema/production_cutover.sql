@@ -34,18 +34,29 @@ SET FOREIGN_KEY_CHECKS = 0;
 RENAME TABLE `users`                TO `legacy_users`;
 RENAME TABLE `instructor_profiles`  TO `legacy_instructor_profiles`;
 RENAME TABLE `payouts`              TO `legacy_payouts`;
+RENAME TABLE `bookings`             TO `legacy_bookings`;
+RENAME TABLE `migrations`           TO `legacy_migrations`;
+
+-- `my_view` is defined as SELECT id, username FROM `users`, so the rename above
+-- leaves it pointing at a table name that no longer exists. Repointing it at
+-- `legacy_users` keeps it returning exactly the same rows. Nothing is dropped:
+-- CREATE OR REPLACE VIEW rewrites the definition in place.
+CREATE OR REPLACE VIEW `my_view` AS SELECT `id` AS `id`, `username` AS `username` FROM `legacy_users`;
 
 SET FOREIGN_KEY_CHECKS = 1;
 
 -- These are NOT renamed. Their names do not collide with anything in the modern
 -- schema, and `legacy:import` reads them where they stand:
 --
---   feedback                  -> becomes session_reports
---   teacher_presence          -> becomes class_sessions
---   teacher_schedules         -> becomes student_schedules
---   audit_log                 -> becomes audit_logs
---   teacher_attendance_backup -> untouched, kept as-is
---   teacher_student_backup    -> untouched, kept as-is
+--   feedback                      -> becomes session_reports
+--   teacher_presence              -> becomes class_sessions
+--   teacher_schedules             -> becomes student_schedules
+--   audit_log                     -> becomes audit_logs
+--
+-- And these are left exactly as they are, untouched and unread:
+--   archived_users, feedback_backup, instructor_attendance_history,
+--   teacher_attendance_backup, teacher_presence_backup, teacher_student_backup,
+--   user_sessions
 
 -- ---------------------------------------------------------------------------
 -- CHECK — every count below must match what it was before this file ran.
@@ -68,4 +79,7 @@ SET FOREIGN_KEY_CHECKS = 1;
 -- RENAME TABLE `legacy_users`               TO `users`;
 -- RENAME TABLE `legacy_instructor_profiles` TO `instructor_profiles`;
 -- RENAME TABLE `legacy_payouts`             TO `payouts`;
+-- RENAME TABLE `legacy_bookings`            TO `bookings`;
+-- RENAME TABLE `legacy_migrations`          TO `migrations`;
+-- CREATE OR REPLACE VIEW `my_view` AS SELECT `id` AS `id`, `username` AS `username` FROM `users`;
 -- SET FOREIGN_KEY_CHECKS = 1;

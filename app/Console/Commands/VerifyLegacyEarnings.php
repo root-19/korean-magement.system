@@ -187,6 +187,12 @@ class VerifyLegacyEarnings extends Command
      */
     private function legacyGross($legacy, int $teacherId, string $start, string $end): float
     {
+        // Resolved, not hard-coded: after an in-place cutover the legacy tables
+        // are renamed and these must follow them. See config/academy.php.
+        $usersTable = config('academy.legacy_tables.users', 'users');
+        $tpTable = config('academy.legacy_tables.teacher_presence', 'teacher_presence');
+        $feedbackTable = config('academy.legacy_tables.feedback', 'feedback');
+
         $prefix = 'Early class held on ';
 
         $paid = "CASE
@@ -219,7 +225,7 @@ class VerifyLegacyEarnings extends Command
                         WHEN MAX(CASE WHEN tp.status = 'absent' AND tp.absent_by = 'teacher' THEN 1 ELSE 0 END) = 1 THEN 'teacher_absent'
                         ELSE NULL
                     END AS resolved_status
-                FROM teacher_presence tp
+                FROM {$tpTable} tp
                 WHERE tp.teacher_id = ?
                   AND tp.status IN ('present','absent')
                   AND {$paid} BETWEEN ? AND ?
@@ -227,8 +233,8 @@ class VerifyLegacyEarnings extends Command
                          tp.student_teaching_methods, tp.student_learning_time,
                          {$paid}, DATE(tp.date), tp.date
             ) d
-            LEFT JOIN users u ON u.id = d.student_id
-            LEFT JOIN feedback f ON f.instructor_id = d.teacher_id
+            LEFT JOIN {$usersTable} u ON u.id = d.student_id
+            LEFT JOIN {$feedbackTable} f ON f.instructor_id = d.teacher_id
                 AND f.student_id = d.student_id
                 AND DATE(COALESCE(f.class_date, f.created_at)) = d.class_date
             WHERE d.resolved_status IS NOT NULL
@@ -238,8 +244,8 @@ class VerifyLegacyEarnings extends Command
                   OR (
                       d.student_id < 0
                       AND NOT EXISTS (
-                          SELECT 1 FROM teacher_presence tp_check
-                          JOIN users u_check ON u_check.id = tp_check.student_id
+                          SELECT 1 FROM {$tpTable} tp_check
+                          JOIN {$usersTable} u_check ON u_check.id = tp_check.student_id
                           WHERE tp_check.teacher_id = d.teacher_id
                             AND {$paidCheck} = d.class_date
                             AND tp_check.student_id > 0
