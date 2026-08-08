@@ -19,6 +19,26 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Both halves are guarded independently. MySQL commits each DDL
+        // statement as it runs, so this migration can legitimately arrive with
+        // the table already made and the column still missing.
+        if (! Schema::hasTable('learning_material_folders')) {
+            $this->createFolders();
+        }
+
+        if (! Schema::hasColumn('learning_materials', 'folder_id')) {
+            Schema::table('learning_materials', function (Blueprint $table) {
+                $table->foreignId('folder_id')
+                    ->nullable()
+                    ->after('id')
+                    ->constrained('learning_material_folders')
+                    ->nullOnDelete();
+            });
+        }
+    }
+
+    private function createFolders(): void
+    {
         Schema::create('learning_material_folders', function (Blueprint $table) {
             $table->id();
             $table->string('name');
@@ -27,14 +47,6 @@ return new class extends Migration
             $table->timestamps();
 
             $table->unique('name');
-        });
-
-        Schema::table('learning_materials', function (Blueprint $table) {
-            $table->foreignId('folder_id')
-                ->nullable()
-                ->after('id')
-                ->constrained('learning_material_folders')
-                ->nullOnDelete();
         });
     }
 

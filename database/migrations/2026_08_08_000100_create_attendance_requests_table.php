@@ -20,6 +20,13 @@ return new class extends Migration
 {
     public function up(): void
     {
+        // Guarded: DDL is not transactional in MySQL, so a run that fails later
+        // leaves this table created but unrecorded, and a re-run would collide
+        // with it.
+        if (Schema::hasTable('attendance_requests')) {
+            return;
+        }
+
         Schema::create('attendance_requests', function (Blueprint $table) {
             $table->id();
 
