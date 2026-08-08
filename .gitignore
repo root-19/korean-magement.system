@@ -1,6 +1,9 @@
 /.phpunit.cache
 /node_modules
-/public/build
+# /public/build is COMMITTED on purpose. The production host has no Node, so the
+# assets cannot be built there; without them Laravel dies with "Vite manifest
+# not found". Re-run `npm run build` and commit the result after changing any
+# Blade, CSS or JS.
 /public/hot
 /public/storage
 /storage/*.key
