@@ -4,10 +4,12 @@ namespace App\Support;
 
 use App\Enums\BookingStatus;
 use App\Enums\EnrollmentStatus;
+use App\Models\AttendanceRequest;
 use App\Models\Booking;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Builds the sidebar for the signed-in user's role.
@@ -134,6 +136,12 @@ final class Navigation
                 'label' => 'Classes',
                 'items' => [
                     self::item('All Classes', 'admin.classes.index', 'calendar'),
+                    self::item(
+                        'Evaluation List',
+                        'admin.evaluations.index',
+                        'clipboard',
+                        badge: self::pendingEvaluationCount(),
+                    ),
                     self::item('Teacher Schedules', 'admin.schedules.index', 'clock'),
                     self::item('Bookings', 'admin.bookings.index', 'book-open'),
                 ],
@@ -157,6 +165,16 @@ final class Navigation
                 ],
             ],
         ];
+    }
+
+    /** Late-attendance requests waiting on a decision; an instructor is unpaid until then. */
+    private static function pendingEvaluationCount(): int
+    {
+        if (! Schema::hasTable('attendance_requests')) {
+            return 0;
+        }
+
+        return AttendanceRequest::query()->pending()->count();
     }
 
     /**

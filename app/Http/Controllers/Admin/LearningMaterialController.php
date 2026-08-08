@@ -5,8 +5,10 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AuditLog;
 use App\Models\LearningMaterial;
+use App\Models\LearningMaterialFolder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -25,9 +27,13 @@ class LearningMaterialController extends Controller
     {
         return view('admin.materials.index', [
             'materials' => LearningMaterial::query()
-                ->with('uploader:id,name')
+                ->with(['uploader:id,name', 'folder:id,name'])
                 ->latest('id')
                 ->paginate(20),
+            'folders' => LearningMaterialFolder::query()
+                ->withCount('materials')
+                ->orderBy('name')
+                ->get(),
         ]);
     }
 
@@ -42,6 +48,9 @@ class LearningMaterialController extends Controller
             'file' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'max:'.self::MAX_KILOBYTES],
 
             'is_published' => ['nullable', 'boolean'],
+
+            // Null is allowed: a material with no folder shows as Uncategorised.
+            'folder_id' => ['nullable', 'integer', 'exists:learning_material_folders,id'],
         ]);
 
         $file = $request->file('file');
@@ -52,6 +61,7 @@ class LearningMaterialController extends Controller
         $published = (bool) ($data['is_published'] ?? false);
 
         $material = LearningMaterial::create([
+            'folder_id' => $data['folder_id'] ?? null,
             'title' => $data['title'],
             'description' => $data['description'] ?? null,
             'file_path' => $path,
@@ -73,6 +83,41 @@ class LearningMaterialController extends Controller
         return back()->with('success', $published
             ? "\"{$material->title}\" is published and visible to instructors."
             : "\"{$material->title}\" is saved as a draft. Publish it when it is ready.");
+    }
+
+    public function storeFolder(Request $request): RedirectResponse
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120', 'unique:learning_material_folders,name'],
+            'description' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        LearningMaterialFolder::create($data + ['created_by' => $request->user()->id]);
+
+        return back()->with('success', "Folder \"{$data['name']}\" created.");
+    }
+
+    /**
+     * Remove a folder. Its materials are NOT deleted with it — `folder_id` is
+     * nullOnDelete, so they fall back to Uncategorised and stay downloadable.
+     */
+    public function destroyFolder(Request $request, LearningMaterialFolder $folder): RedirectResponse
+    {
+        $count = $folder->materials()->count();
+        $name = $folder->name;
+
+        $folder->delete();
+
+        AuditLog::record(
+            action: 'material_folder.deleted',
+            targetName: $name,
+            details: ['materials_moved' => $count],
+            userId: $request->user()->id,
+        );
+
+        return back()->with('success', $count > 0
+            ? "Folder \"{$name}\" removed. Its {$count} ".Str::plural('material', $count).' moved to Uncategorised.'
+            : "Folder \"{$name}\" removed.");
     }
 
     /**

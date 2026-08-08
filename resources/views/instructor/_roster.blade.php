@@ -18,6 +18,9 @@
     // recorded on the day, and teaching a later slot early goes through the
     // early-class flow on the class list, which credits the right date.
     $markable = $markable ?? ! $day->copy()->startOfDay()->isFuture();
+
+    // A past day is closed as well, unless an admin reopened that exact class.
+    $isPast = $day->copy()->startOfDay()->isPast() && ! $day->isToday();
 @endphp
 
 @if ($roster->isEmpty())
@@ -45,6 +48,9 @@
                         $student = $row['student'];
                         $profile = $row['profile'];
                         $session = $row['session'];
+
+                        $evaluation = $row['request'] ?? null;
+                        $classOpen = App\Models\AttendanceRequest::classIsOpen($dateString, $evaluation);
 
                         // Where a postponement would send this class, for the modal.
                         $makeup = App\Support\MakeupSchedule::for(
@@ -126,6 +132,28 @@
                                                 <x-icon name="x" class="h-3.5 w-3.5" />
                                             </button>
                                         </form>
+                                    @elseif (! $classOpen)
+                                        {{-- Closed: this class is no longer today, so marking it
+                                             is a payroll edit and needs an admin decision. --}}
+                                        @if ($evaluation?->isPending())
+                                            <span class="badge-warning">Awaiting evaluation</span>
+                                        @else
+                                            @if ($evaluation?->isRejected())
+                                                <span class="badge-danger">Rejected</span>
+                                            @endif
+
+                                            <button type="button"
+                                                    class="btn-secondary btn-sm"
+                                                    x-on:click="$dispatch('open-evaluation-modal', @js([
+                                                        'studentId' => $student->id,
+                                                        'studentName' => $student->name,
+                                                        'date' => $dateString,
+                                                        'dateLabel' => $day->format('l, F j, Y'),
+                                                        'rejectedNote' => $evaluation?->decision_note,
+                                                    ]))">
+                                                For evaluation
+                                            </button>
+                                        @endif
                                     @else
                                         <form method="POST" action="{{ route('instructor.classes.attendance') }}" class="inline">
                                             @csrf

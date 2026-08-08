@@ -94,8 +94,11 @@ class InstructorDashboardTest extends TestCase
     }
 
     #[Test]
-    public function a_past_date_from_the_calendar_is_markable(): void
+    public function a_past_date_from_the_calendar_is_closed_to_marking(): void
     {
+        // Marking a past class releases a payment for a week that may already be
+        // settled, so the day it happened is the only day it can be recorded.
+        // Reopening it is an admin decision -- see LateAttendanceTest.
         $yesterday = now()->subDay();
 
         StudentSchedule::create([
@@ -109,7 +112,8 @@ class InstructorDashboardTest extends TestCase
             ->assertOk()
             ->assertSee('Students for '.$yesterday->format('F j, Y'))
             ->assertSee('Total present time')
-            ->assertSee('>Present<', false);
+            ->assertSee('For evaluation')
+            ->assertDontSee('>Present<', false);
     }
 
     #[Test]

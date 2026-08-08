@@ -79,6 +79,9 @@
                                 $profile = $row['profile'];
                                 $session = $row['session'];
 
+                                $evaluation = $row['request'] ?? null;
+                                $classOpen = App\Models\AttendanceRequest::classIsOpen($date->toDateString(), $evaluation);
+
                                 // Where a postponement would send this class, for the modal.
                                 $makeup = App\Support\MakeupSchedule::for(
                                     $student,
@@ -146,6 +149,28 @@
                                                         <x-icon name="x" class="h-3.5 w-3.5" />
                                                     </button>
                                                 </form>
+                                            @elseif (! $classOpen)
+                                                {{-- Closed: no longer today, so marking it would
+                                                     change a past payout. Needs an admin. --}}
+                                                @if ($evaluation?->isPending())
+                                                    <span class="badge-warning">Awaiting evaluation</span>
+                                                @else
+                                                    @if ($evaluation?->isRejected())
+                                                        <span class="badge-danger">Rejected</span>
+                                                    @endif
+
+                                                    <button type="button"
+                                                            class="btn-secondary btn-sm"
+                                                            x-on:click="$dispatch('open-evaluation-modal', @js([
+                                                                'studentId' => $student->id,
+                                                                'studentName' => $student->name,
+                                                                'date' => $date->toDateString(),
+                                                                'dateLabel' => $date->format('l, F j, Y'),
+                                                                'rejectedNote' => $evaluation?->decision_note,
+                                                            ]))">
+                                                        For evaluation
+                                                    </button>
+                                                @endif
                                             @else
                                                 <form method="POST"
                                                       action="{{ route('instructor.classes.attendance') }}"
@@ -256,4 +281,5 @@
 
     @include('instructor.classes._early-modal', ['roster' => $roster, 'date' => $date])
     @include('instructor._postpone-modal')
+    @include('instructor._evaluation-modal')
 @endsection

@@ -319,4 +319,5 @@
 
     {{-- Shared by every roster panel above: today, tomorrow and the selected date. --}}
     @include('instructor._postpone-modal')
+    @include('instructor._evaluation-modal')
 @endsection

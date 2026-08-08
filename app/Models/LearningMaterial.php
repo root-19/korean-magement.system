@@ -25,6 +25,7 @@ class LearningMaterial extends Model
     public const DIRECTORY = 'learning-materials';
 
     protected $fillable = [
+        'folder_id',
         'title',
         'description',
         'file_path',
@@ -46,6 +47,12 @@ class LearningMaterial extends Model
     public function uploader(): BelongsTo
     {
         return $this->belongsTo(User::class, 'uploaded_by');
+    }
+
+    /** Null means the material sits outside any folder — shown as Uncategorised. */
+    public function folder(): BelongsTo
+    {
+        return $this->belongsTo(LearningMaterialFolder::class, 'folder_id');
     }
 
     // ------------------------------------------------------------------- scopes

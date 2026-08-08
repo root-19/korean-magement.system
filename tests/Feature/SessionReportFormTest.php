@@ -6,6 +6,8 @@ use App\Enums\EnrollmentStatus;
 use App\Models\SessionReport;
 use App\Models\StudentProfile;
 use App\Models\User;
+use Carbon\Carbon;
+use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Js;
 use PHPUnit\Framework\Attributes\Test;
@@ -33,6 +35,11 @@ class SessionReportFormTest extends TestCase
     protected function setUp(): void
     {
         parent::setUp();
+
+        // The report form marks attendance on $date, and a class is only markable
+        // on the day it happened, so the clock sits on that day.
+        Carbon::setTestNow($this->date.' 10:00:00');
+        CarbonImmutable::setTestNow($this->date.' 10:00:00');
 
         $this->instructor = User::factory()->instructor()->create();
         $this->student = User::factory()->student()->create(['name' => 'A194 Report Student']);

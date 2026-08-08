@@ -6,17 +6,20 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\Party;
 use App\Enums\SessionStatus;
 use App\Http\Controllers\Controller;
+use App\Models\AttendanceRequest;
 use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\Attendance\AttendanceService;
 use App\Support\MakeupSchedule;
+use App\Support\PayoutWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 /**
@@ -69,6 +72,8 @@ class ClassSessionController extends Controller
         $student = $this->authorizedStudent($instructor, (int) $data['student_id']);
         $status = SessionStatus::from($data['status']);
 
+        $this->assertClassIsOpen($instructor, $student, $data['date']);
+
         // `validate()` returns only the keys the request actually contained, so a
         // nullable field that was never submitted is ABSENT, not null — the
         // "Present" button posts no `party` at all. tryFrom on a coalesced string
@@ -112,6 +117,15 @@ class ClassSessionController extends Controller
                     : '',
             )
             : "{$student->name} marked {$status->label()}.";
+
+        // A reopened late class pays into the week it happened, not this one, and
+        // the earnings page opens on the CURRENT week -- so without this the
+        // instructor marks it, sees an empty payslip, and thinks it was lost.
+        $window = PayoutWindow::forDate($data['date']);
+
+        if (! $window->isCurrent()) {
+            $message .= " It counts toward the {$window->label()} payslip.";
+        }
 
         if ($request->expectsJson()) {
             return response()->json([
@@ -178,6 +192,92 @@ class ClassSessionController extends Controller
         return $request->expectsJson()
             ? response()->json(['success' => true, 'message' => $message])
             : back()->with('success', $message);
+    }
+
+    /**
+     * Ask an admin to reopen a class that has already passed.
+     *
+     * Idempotent on the class: asking again after a rejection reuses the row and
+     * puts it back to pending, so the decision history stays in one place.
+     */
+    public function requestEvaluation(Request $request): RedirectResponse
+    {
+        $instructor = $request->user();
+
+        $data = $request->validate([
+            'student_id' => ['required', 'integer', 'exists:users,id'],
+            // Bound to the app's clock: `before_or_equal:today` resolves through
+            // strtotime(), which ignores Carbon's test time and any app timezone.
+            'date' => ['required', 'date', 'before_or_equal:'.CarbonImmutable::today()->toDateString()],
+            'reason' => ['required', 'string', 'min:5', 'max:1000'],
+        ]);
+
+        $student = $this->authorizedStudent($instructor, (int) $data['student_id']);
+        $date = CarbonImmutable::parse($data['date'])->toDateString();
+
+        $existing = AttendanceRequest::query()
+            ->where('instructor_id', $instructor->id)
+            ->where('student_id', $student->id)
+            ->whereDate('class_date', $date)
+            ->first();
+
+        if ($existing?->isApproved()) {
+            return back()->with('success', 'That class is already approved — you can mark it now.');
+        }
+
+        AttendanceRequest::updateOrCreate(
+            [
+                'instructor_id' => $instructor->id,
+                'student_id' => $student->id,
+                'class_date' => $date,
+            ],
+            [
+                'reason' => $data['reason'],
+                'status' => AttendanceRequest::PENDING,
+                'decided_by' => null,
+                'decided_at' => null,
+                'decision_note' => null,
+            ],
+        );
+
+        return back()->with('success', sprintf(
+            'Sent for evaluation: %s on %s. You can mark it once an admin approves.',
+            $student->name,
+            CarbonImmutable::parse($date)->format('M j'),
+        ));
+    }
+
+    /**
+     * Refuse to record attendance on a closed class.
+     *
+     * Marking a session releases its payment, so a late marking is a payroll
+     * edit. Today is open; an earlier date needs an approved AttendanceRequest
+     * for that exact class. The button is hidden in the roster too, but this is
+     * the check that counts — the form is a plain POST anyone could replay.
+     */
+    private function assertClassIsOpen(User $instructor, User $student, string $date): void
+    {
+        $request = AttendanceRequest::query()
+            ->where('instructor_id', $instructor->id)
+            ->where('student_id', $student->id)
+            ->whereDate('class_date', $date)
+            ->first();
+
+        if (AttendanceRequest::classIsOpen($date, $request)) {
+            return;
+        }
+
+        $when = CarbonImmutable::parse($date);
+
+        throw ValidationException::withMessages([
+            'date' => $when->isFuture()
+                ? 'That class has not happened yet.'
+                : sprintf(
+                    'The %s class for %s is closed. Send it for evaluation and an admin can reopen it.',
+                    $when->format('M j'),
+                    $student->name,
+                ),
+        ]);
     }
 
     // ---------------------------------------------------------------- internals
@@ -252,6 +352,16 @@ class ClassSessionController extends Controller
             ->get()
             ->keyBy('student_id');
 
+        $dateString = $date->toDateString();
+
+        // Whether each class is still open to marking: today is, an earlier day
+        // needs an approved request. Fetched once for the whole roster.
+        $requests = AttendanceRequest::query()
+            ->where('instructor_id', $instructorId)
+            ->whereDate('class_date', $dateString)
+            ->get()
+            ->keyBy('student_id');
+
         // Reports are matched on the natural key, the same way the earnings
         // query does, so historical rows with no resolved FK still count.
         $reported = DB::table('session_reports')
@@ -259,7 +369,7 @@ class ClassSessionController extends Controller
             ->whereIn('student_id', $students->pluck('id'))
             ->pluck('class_date', 'student_id');
 
-        return $students->map(function (User $student) use ($sessions, $reported, $date) {
+        return $students->map(function (User $student) use ($sessions, $reported, $date, $requests) {
             $session = $sessions->get($student->id);
             $paidDate = $session?->paid_date?->toDateString() ?? $date->toDateString();
 
@@ -270,6 +380,7 @@ class ClassSessionController extends Controller
                 'session' => $session,
                 'has_report' => isset($reported[$student->id])
                     && (string) $reported[$student->id] === $paidDate,
+                'request' => $requests->get($student->id),
             ];
         });
     }

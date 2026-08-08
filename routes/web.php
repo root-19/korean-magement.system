@@ -4,6 +4,7 @@ use App\Http\Controllers\Admin\ClassSessionController as AdminClassSessions;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Admin\EnrollmentController;
 use App\Http\Controllers\Admin\InstructorController as AdminInstructors;
+use App\Http\Controllers\Admin\AttendanceRequestController as AdminEvaluations;
 use App\Http\Controllers\Admin\LearningMaterialController as AdminMaterials;
 use App\Http\Controllers\Admin\OverviewController as AdminOverview;
 use App\Http\Controllers\Admin\PayoutController;
@@ -103,6 +104,10 @@ Route::middleware(['auth', 'role:instructor,admin'])
         Route::get('/bookings', [BookingController::class, 'index'])->name('bookings.index');
         Route::patch('/bookings/{booking}', [BookingController::class, 'updateStatus'])->name('bookings.status');
 
+        // Asking an admin to reopen a class that has already passed.
+        Route::post('/classes/evaluation', [ClassSessionController::class, 'requestEvaluation'])
+            ->name('classes.evaluation');
+
         // Learning materials published by an admin. The PDF is served by the
         // controller, not by the web server, so it stays behind auth.
         Route::get('/learning-materials', [LearningMaterialController::class, 'index'])
@@ -172,9 +177,16 @@ Route::middleware(['auth', 'role:admin'])
         // Classes across all instructors
         Route::get('/classes', [AdminClassSessions::class, 'index'])->name('classes.index');
 
+        // Evaluation queue for late attendance
+        Route::get('/evaluations', [AdminEvaluations::class, 'index'])->name('evaluations.index');
+        Route::patch('/evaluations/{evaluation}', [AdminEvaluations::class, 'decide'])->name('evaluations.decide');
+
         // Learning materials handed out to instructors
         Route::get('/materials', [AdminMaterials::class, 'index'])->name('materials.index');
         Route::post('/materials', [AdminMaterials::class, 'store'])->name('materials.store');
+        Route::post('/material-folders', [AdminMaterials::class, 'storeFolder'])->name('materials.folders.store');
+        Route::delete('/material-folders/{folder}', [AdminMaterials::class, 'destroyFolder'])
+            ->name('materials.folders.destroy');
         Route::patch('/materials/{material}/published', [AdminMaterials::class, 'togglePublished'])
             ->name('materials.published');
         Route::delete('/materials/{material}', [AdminMaterials::class, 'destroy'])->name('materials.destroy');

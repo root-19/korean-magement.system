@@ -7,7 +7,43 @@
 @section('content')
     <div class="grid gap-4 lg:grid-cols-3">
         {{-- ──────────────────────────────────────────────── Upload form ───── --}}
-        <div class="lg:col-span-1">
+        <div class="lg:col-span-1 space-y-4">
+            <x-card title="Folders" subtitle="One level, to group the library">
+                <form method="POST" action="{{ route('admin.materials.folders.store') }}" class="flex gap-2">
+                    @csrf
+                    <input type="text" name="name" maxlength="120" required class="form-input"
+                           placeholder="e.g. Grammar drills" value="{{ old('name') }}">
+                    <button type="submit" class="btn-secondary shrink-0">Add</button>
+                </form>
+                @error('name') <p class="form-error">{{ $message }}</p> @enderror
+
+                @if ($folders->isNotEmpty())
+                    <ul class="mt-3 space-y-1.5 border-t border-gray-700 pt-3">
+                        @foreach ($folders as $folder)
+                            <li class="flex items-center justify-between gap-2 text-sm">
+                                <span class="min-w-0 truncate text-gray-300">
+                                    {{ $folder->name }}
+                                    <span class="numeric text-xs text-gray-500">({{ $folder->materials_count }})</span>
+                                </span>
+
+                                {{-- Removing a folder never removes its PDFs; they
+                                     fall back to Uncategorised. --}}
+                                <form method="POST"
+                                      action="{{ route('admin.materials.folders.destroy', $folder) }}"
+                                      onsubmit="return confirm('Remove this folder? Its materials move to Uncategorised - nothing is deleted.')">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn-ghost btn-sm !px-1.5"
+                                            aria-label="Remove folder {{ $folder->name }}">
+                                        <x-icon name="trash" class="h-3.5 w-3.5" />
+                                    </button>
+                                </form>
+                            </li>
+                        @endforeach
+                    </ul>
+                @endif
+            </x-card>
+
             <x-card title="Post a material" subtitle="PDF, up to 20 MB">
                 <form method="POST"
                       action="{{ route('admin.materials.store') }}"
@@ -39,6 +75,20 @@
                                   class="form-textarea"
                                   placeholder="What this covers, and who it is for">{{ old('description') }}</textarea>
                         @error('description') <p class="form-error">{{ $message }}</p> @enderror
+                    </div>
+
+                    <div>
+                        <label for="folder_id" class="form-label">
+                            Folder <span class="text-gray-500">(optional)</span>
+                        </label>
+                        <select id="folder_id" name="folder_id" class="form-select">
+                            <option value="">Uncategorised</option>
+                            @foreach ($folders as $folder)
+                                <option value="{{ $folder->id }}" @selected(old('folder_id') == $folder->id)>
+                                    {{ $folder->name }}
+                                </option>
+                            @endforeach
+                        </select>
                     </div>
 
                     <div>
@@ -116,6 +166,7 @@
                                             @endif
 
                                             <p class="mt-0.5 text-xs text-gray-500">
+                                                <span class="badge-neutral">{{ $material->folder?->name ?? 'Uncategorised' }}</span>
                                                 {{ $material->original_name }} ·
                                                 <span class="numeric">{{ $material->readableSize() }}</span>
                                             </p>

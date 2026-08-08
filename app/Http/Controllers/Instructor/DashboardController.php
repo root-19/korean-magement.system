@@ -6,6 +6,7 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\Party;
 use App\Enums\SessionStatus;
 use App\Http\Controllers\Controller;
+use App\Models\AttendanceRequest;
 use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -141,6 +142,14 @@ class DashboardController extends Controller
             ]);
         }
 
+        // Whether each class is still open to marking: today is, an earlier day
+        // needs an approved request. Fetched once for the whole roster.
+        $requests = AttendanceRequest::query()
+            ->where('instructor_id', $instructorId)
+            ->whereDate('class_date', $dateString)
+            ->get()
+            ->keyBy('student_id');
+
         // Report existence, matched on the natural key the earnings query uses.
         $reported = DB::table('session_reports')
             ->where('instructor_id', $instructorId)
@@ -150,8 +159,9 @@ class DashboardController extends Controller
             ->flip();
 
         return $rows
-            ->map(function (array $row) use ($reported) {
+            ->map(function (array $row) use ($reported, $requests) {
                 $row['has_report'] = $reported->has($row['student']?->id);
+                $row['request'] = $requests->get($row['student']?->id);
 
                 return $row;
             })

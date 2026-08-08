@@ -10,6 +10,7 @@ use App\Models\StudentProfile;
 use App\Models\StudentSchedule;
 use App\Models\User;
 use App\Support\MakeupSchedule;
+use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use PHPUnit\Framework\Attributes\Test;
@@ -37,7 +38,11 @@ class PostponeTest extends TestCase
     {
         parent::setUp();
 
+        // Both classes: Carbon and CarbonImmutable hold separate test clocks,
+        // and the views read now() while the closed-class gate reads
+        // CarbonImmutable::today(). Setting one leaves them a day apart.
         CarbonImmutable::setTestNow($this->friday.' 09:00:00');
+        Carbon::setTestNow($this->friday.' 09:00:00');
 
         $this->instructor = User::factory()->instructor()->create();
         $this->student = User::factory()->student()->create(['name' => 'A100 Postpone Me']);
@@ -61,6 +66,7 @@ class PostponeTest extends TestCase
     protected function tearDown(): void
     {
         CarbonImmutable::setTestNow();
+        Carbon::setTestNow();
 
         parent::tearDown();
     }

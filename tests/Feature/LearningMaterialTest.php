@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Models\LearningMaterial;
+use App\Models\LearningMaterialFolder;
 use App\Models\User;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
@@ -74,6 +75,114 @@ class LearningMaterialTest extends TestCase
             'description' => 'Ten pages of drills for the B1 group.',
             'file' => $this->pdf(),
         ], $overrides);
+    }
+
+    // ----------------------------------------------------------------- folders
+
+    #[Test]
+    public function an_admin_can_create_a_folder_and_upload_into_it(): void
+    {
+        $this->actingAs($this->admin)
+            ->post(route('admin.materials.folders.store'), ['name' => 'Grammar drills'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $folder = LearningMaterialFolder::firstOrFail();
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.materials.store'), $this->payload([
+                'folder_id' => $folder->id,
+                'is_published' => 1,
+            ]))
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame($folder->id, LearningMaterial::firstOrFail()->folder_id);
+        $this->assertSame(1, $folder->materials()->count());
+    }
+
+    #[Test]
+    public function folder_names_are_unique(): void
+    {
+        LearningMaterialFolder::create(['name' => 'Grammar drills']);
+
+        $this->actingAs($this->admin)
+            ->post(route('admin.materials.folders.store'), ['name' => 'Grammar drills'])
+            ->assertSessionHasErrors('name');
+
+        $this->assertSame(1, LearningMaterialFolder::count());
+    }
+
+    #[Test]
+    public function deleting_a_folder_keeps_its_materials(): void
+    {
+        // The whole point: a folder is a label, not a container. Removing the
+        // label must never take the PDFs with it.
+        $folder = LearningMaterialFolder::create(['name' => 'Grammar drills']);
+        $material = $this->makeMaterial(published: true, title: 'Inside the folder');
+        $material->update(['folder_id' => $folder->id]);
+
+        $this->actingAs($this->admin)
+            ->delete(route('admin.materials.folders.destroy', $folder))
+            ->assertRedirect();
+
+        $this->assertSame(0, LearningMaterialFolder::count());
+        $this->assertSame(1, LearningMaterial::count(), 'the material outlives its folder');
+        $this->assertNull($material->refresh()->folder_id, 'and falls back to Uncategorised');
+        Storage::disk(LearningMaterial::DISK)->assertExists($material->file_path);
+    }
+
+    #[Test]
+    public function the_instructor_page_shows_folders_before_their_contents(): void
+    {
+        $folder = LearningMaterialFolder::create(['name' => 'Grammar drills']);
+
+        $this->makeMaterial(published: true, title: 'Filed away')->update(['folder_id' => $folder->id]);
+        $this->makeMaterial(published: true, title: 'Loose material');
+
+        // The landing page is folders only — a closed shelf.
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.materials.index'))
+            ->assertOk()
+            ->assertSee('Grammar drills')
+            ->assertSee('Uncategorised')
+            ->assertDontSee('Filed away')
+            ->assertDontSee('Loose material');
+
+        // Opening one shows what is in it, and nothing from the other.
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.materials.index', ['folder' => $folder->id]))
+            ->assertOk()
+            ->assertSee('Filed away')
+            ->assertDontSee('Loose material');
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.materials.index', ['folder' => 'none']))
+            ->assertOk()
+            ->assertSee('Loose material')
+            ->assertDontSee('Filed away');
+    }
+
+    #[Test]
+    public function a_folder_holding_only_drafts_is_not_offered(): void
+    {
+        // Otherwise it opens onto an empty shelf and reads as a broken link.
+        $folder = LearningMaterialFolder::create(['name' => 'Not ready yet']);
+        $this->makeMaterial(published: false, title: 'Still a draft')->update(['folder_id' => $folder->id]);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.materials.index'))
+            ->assertOk()
+            ->assertDontSee('Not ready yet');
+    }
+
+    #[Test]
+    public function an_instructor_cannot_create_a_folder(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('admin.materials.folders.store'), ['name' => 'Mine'])
+            ->assertForbidden();
+
+        $this->assertSame(0, LearningMaterialFolder::count());
     }
 
     // ----------------------------------------------------------------- posting
@@ -177,8 +286,9 @@ class LearningMaterialTest extends TestCase
         $this->makeMaterial(published: true, title: 'Published resource');
         $this->makeMaterial(published: false, title: 'Draft resource');
 
+        // Both are unfiled, so they live behind the Uncategorised folder.
         $this->actingAs($this->instructor)
-            ->get(route('instructor.materials.index'))
+            ->get(route('instructor.materials.index', ['folder' => 'none']))
             ->assertOk()
             ->assertSee('Published resource')
             ->assertDontSee('Draft resource');
