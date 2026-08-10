@@ -106,7 +106,13 @@
 
                                 <td>
                                     @if ($session->report)
-                                        <span class="badge-success">Filed</span>
+                                        {{-- Bound to the report, so it opens even for a student
+                                             who has since been archived or reassigned. --}}
+                                        <a href="{{ route('instructor.reports.edit', $session->report) }}"
+                                           class="btn-secondary btn-sm">
+                                            <x-icon name="pencil" class="h-3.5 w-3.5" />
+                                            Edit report
+                                        </a>
                                     @elseif ($session->isPayable())
                                         <a href="{{ route('instructor.reports.create', [
                                                 'student_id' => $session->student_id,

@@ -32,13 +32,23 @@
                                 </td>
 
                                 <td>
-                                    <a href="{{ route('instructor.students.show', $report->student_id) }}"
-                                       class="focus-ring flex items-center gap-2.5 rounded">
-                                        <x-avatar :user="$report->student" class="h-8 w-8" />
-                                        <span class="truncate font-medium text-white">
-                                            {{ $report->student->name }}
+                                    @php
+                                        // The student page is bound to a live student, so an
+                                        // archived one is shown as a label rather than a link
+                                        // into a 404. The report itself stays editable.
+                                        $linkable = $report->student && ! $report->student->trashed();
+                                    @endphp
+
+                                    @if ($linkable)
+                                        <a href="{{ route('instructor.students.show', $report->student_id) }}"
+                                           class="focus-ring flex items-center gap-2.5 rounded">
+                                            @include('instructor.reports._student', ['student' => $report->student])
+                                        </a>
+                                    @else
+                                        <span class="flex items-center gap-2.5">
+                                            @include('instructor.reports._student', ['student' => $report->student])
                                         </span>
-                                    </a>
+                                    @endif
                                 </td>
 
                                 <td class="max-w-sm truncate text-gray-500">
@@ -56,10 +66,7 @@
                                 </td>
 
                                 <td class="text-right">
-                                    <a href="{{ route('instructor.reports.create', [
-                                            'student_id' => $report->student_id,
-                                            'date' => $report->class_date->toDateString(),
-                                        ]) }}"
+                                    <a href="{{ route('instructor.reports.edit', $report) }}"
                                        class="btn-secondary btn-sm">
                                         <x-icon name="pencil" class="h-3.5 w-3.5" />
                                         Edit

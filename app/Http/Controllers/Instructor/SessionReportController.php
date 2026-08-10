@@ -17,6 +17,12 @@ use Illuminate\View\View;
  *
  * Filing one is what releases payment for the session, so the form is reachable
  * directly from any unpaid session on the dashboard and the class list.
+ *
+ * Two ways in, because they authorise differently. Filing a new report is keyed
+ * on (student, date) and requires the student to be assigned to the instructor
+ * right now. Re-opening a filed one is keyed on the report, and the report
+ * itself is the authorisation — a student who has since been archived or handed
+ * to another instructor must not lock the instructor out of what they wrote.
  */
 class SessionReportController extends Controller
 {
@@ -25,7 +31,12 @@ class SessionReportController extends Controller
         $instructor = $request->user();
 
         $reports = SessionReport::query()
-            ->with(['student:id,name,avatar_path'])
+            // withTrashed on the student: this list is history, and archiving a
+            // student must not take the instructor's own reports down with it.
+            // Without it the relation resolves to null and the page 500s.
+            ->with([
+                'student' => fn ($q) => $q->withTrashed()->select('id', 'name', 'avatar_path', 'deleted_at'),
+            ])
             ->forInstructor($instructor->id)
             ->orderByDesc('class_date')
             ->orderByDesc('id')
@@ -51,37 +62,36 @@ class SessionReportController extends Controller
         $student = $this->authorizedStudent($instructor, (int) $data['student_id']);
         $date = CarbonImmutable::parse($data['date'])->toDateString();
 
-        $session = ClassSession::query()
-            ->where('instructor_id', $instructor->id)
-            ->where('student_id', $student->id)
-            ->where('paid_date', $date)
-            ->first();
-
         $report = SessionReport::query()
             ->where('instructor_id', $instructor->id)
             ->where('student_id', $student->id)
             ->where('class_date', $date)
             ->first();
 
-        $profile = $student->studentProfile;
+        return $this->form($instructor->id, $student, $date, $report);
+    }
 
-        return view('instructor.reports.create', [
-            'student' => $student,
-            'profile' => $profile,
-            'date' => $date,
-            'session' => $session,
-            'report' => $report,
-            'previous' => $this->previousReport($instructor->id, $student->id, $date),
+    /**
+     * Re-open a filed report.
+     *
+     * Bound to the report rather than to (student, date) so the page survives
+     * everything that can happen to the enrolment afterwards.
+     */
+    public function edit(Request $request, SessionReport $report): View
+    {
+        abort_unless($report->instructor_id === $request->user()->id, 403);
 
-            // Where the student is in their plan — "5 of 15 taught, 10 left".
-            // sessionsPurchased() owns the accounting identity (attended +
-            // student-absent + remaining + deducted), so it is not restated here.
-            'progress' => [
-                'attended' => (int) ($profile?->sessions_attended ?? 0),
-                'purchased' => (int) ($profile?->sessionsPurchased() ?? 0),
-                'remaining' => (int) ($profile?->sessions_remaining ?? 0),
-            ],
-        ]);
+        $student = User::query()
+            ->withTrashed()
+            ->with('studentProfile')
+            ->findOrFail($report->student_id);
+
+        return $this->form(
+            $report->instructor_id,
+            $student,
+            $report->class_date->toDateString(),
+            $report,
+        );
     }
 
     /**
@@ -96,9 +106,104 @@ class SessionReportController extends Controller
     {
         $instructor = $request->user();
 
-        $data = $request->validate([
+        $data = $request->validate(array_merge([
             'student_id' => ['required', 'integer', 'exists:users,id'],
             'class_date' => ['required', 'date'],
+        ], $this->contentRules()));
+
+        $student = $this->authorizedStudent($instructor, (int) $data['student_id']);
+        $date = CarbonImmutable::parse($data['class_date'])->toDateString();
+
+        $report = SessionReport::updateOrCreate(
+            [
+                'instructor_id' => $instructor->id,
+                'student_id' => $student->id,
+                'class_date' => $date,
+            ],
+            $this->attributes($data, $instructor->id, $student->id, $date),
+        );
+
+        return $this->saved($request, $report, $student->name);
+    }
+
+    /**
+     * Save an edit to an already-filed report.
+     *
+     * The natural key — instructor, student, class_date — is deliberately not
+     * writable here: earnings match a report to its session on exactly those
+     * three columns, so moving one would silently re-point a payment.
+     */
+    public function update(Request $request, SessionReport $report): RedirectResponse|JsonResponse
+    {
+        abort_unless($report->instructor_id === $request->user()->id, 403);
+
+        $data = $request->validate($this->contentRules());
+
+        $date = $report->class_date->toDateString();
+
+        $report->fill($this->attributes($data, $report->instructor_id, $report->student_id, $date))->save();
+
+        $student = User::withTrashed()->find($report->student_id);
+
+        return $this->saved($request, $report, $student?->name ?? 'this student');
+    }
+
+    /**
+     * JSON lookup used by the class list to show a filed report in a drawer.
+     */
+    public function show(Request $request, SessionReport $report): JsonResponse
+    {
+        abort_unless($report->instructor_id === $request->user()->id, 403);
+
+        return response()->json([
+            'success' => true,
+            'report' => $report->only(array_merge(
+                ['id', 'class_date', 'today_lesson', 'next_lesson', 'grammar_section',
+                    'pronunciation_section', 'vocab_section', 'teacher_comments'],
+                array_keys(SessionReport::SCORE_FIELDS),
+            )),
+            'average' => $report->averageScore(),
+        ]);
+    }
+
+    // ---------------------------------------------------------------- internals
+
+    /**
+     * The form view, shared by filing and editing.
+     */
+    private function form(int $instructorId, User $student, string $date, ?SessionReport $report): View
+    {
+        $profile = $student->studentProfile;
+
+        return view('instructor.reports.create', [
+            'student' => $student,
+            'profile' => $profile,
+            'date' => $date,
+            'session' => $this->linkedSession($instructorId, $student->id, $date),
+            'report' => $report,
+            'previous' => $this->previousReport($instructorId, $student->id, $date),
+
+            // Where the student is in their plan — "5 of 15 taught, 10 left".
+            // sessionsPurchased() owns the accounting identity (attended +
+            // student-absent + remaining + deducted), so it is not restated here.
+            'progress' => [
+                'attended' => (int) ($profile?->sessions_attended ?? 0),
+                'purchased' => (int) ($profile?->sessionsPurchased() ?? 0),
+                'remaining' => (int) ($profile?->sessions_remaining ?? 0),
+            ],
+        ]);
+    }
+
+    /**
+     * Validation for the report body. Shared so filing and editing cannot drift
+     * apart — a field editable on one and not the other would be silently
+     * dropped on save.
+     *
+     * @return array<string, array<int, string>>
+     */
+    private function contentRules(): array
+    {
+        return [
             'today_lesson' => ['nullable', 'string', 'max:5000'],
             'next_lesson' => ['nullable', 'string', 'max:5000'],
             'teacher_comments' => ['nullable', 'string', 'max:5000'],
@@ -124,20 +229,22 @@ class SessionReportController extends Controller
             'pronunciation_score' => ['nullable', 'integer', 'between:1,10'],
             'vocabulary_score' => ['nullable', 'integer', 'between:1,10'],
             'grammar_score' => ['nullable', 'integer', 'between:1,10'],
-        ]);
+        ];
+    }
 
-        $student = $this->authorizedStudent($instructor, (int) $data['student_id']);
-        $date = CarbonImmutable::parse($data['class_date'])->toDateString();
-
-        // Link the report to its session where one exists, so the relation is
-        // available going forward even though earnings match on the natural key.
-        $session = ClassSession::query()
-            ->where('instructor_id', $instructor->id)
-            ->where('student_id', $student->id)
-            ->where('paid_date', $date)
-            ->first();
-
-        // Fold the repeatable rows back into their one column each.
+    /**
+     * The writable columns for a validated payload: the repeatable rows folded
+     * back into their one column each, plus the session link.
+     *
+     * The link is re-resolved on every save rather than only on insert, so a
+     * report filed before attendance was marked picks up its session on the
+     * next edit instead of staying orphaned.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function attributes(array $data, int $instructorId, int $studentId, string $date): array
+    {
         $sections = [];
 
         foreach (SessionReport::ROW_SECTIONS as $column => $section) {
@@ -147,25 +254,34 @@ class SessionReportController extends Controller
             );
         }
 
-        $report = SessionReport::updateOrCreate(
-            [
-                'instructor_id' => $instructor->id,
-                'student_id' => $student->id,
-                'class_date' => $date,
-            ],
-            array_merge(
-                collect($data)
-                    ->except(array_merge(
-                        ['student_id', 'class_date'],
-                        array_column(SessionReport::ROW_SECTIONS, 'input'),
-                    ))
-                    ->all(),
-                $sections,
-                ['class_session_id' => $session?->id],
-            ),
+        return array_merge(
+            collect($data)
+                ->except(array_merge(
+                    ['student_id', 'class_date'],
+                    array_column(SessionReport::ROW_SECTIONS, 'input'),
+                ))
+                ->all(),
+            $sections,
+            ['class_session_id' => $this->linkedSession($instructorId, $studentId, $date)?->id],
         );
+    }
 
-        $message = "Report saved for {$student->name}.";
+    /**
+     * The attendance row this report describes, if it has been marked.
+     * Matched on paid_date, which for an early class is its held date.
+     */
+    private function linkedSession(int $instructorId, int $studentId, string $date): ?ClassSession
+    {
+        return ClassSession::query()
+            ->where('instructor_id', $instructorId)
+            ->where('student_id', $studentId)
+            ->where('paid_date', $date)
+            ->first();
+    }
+
+    private function saved(Request $request, SessionReport $report, string $studentName): RedirectResponse|JsonResponse
+    {
+        $message = "Report saved for {$studentName}.";
 
         if ($request->expectsJson()) {
             return response()->json(['success' => true, 'message' => $message, 'id' => $report->id]);
@@ -175,26 +291,6 @@ class SessionReportController extends Controller
             ->route('instructor.reports.index')
             ->with('success', $message);
     }
-
-    /**
-     * JSON lookup used by the class list to show a filed report in a drawer.
-     */
-    public function show(Request $request, SessionReport $report): JsonResponse
-    {
-        abort_unless($report->instructor_id === $request->user()->id, 403);
-
-        return response()->json([
-            'success' => true,
-            'report' => $report->only(array_merge(
-                ['id', 'class_date', 'today_lesson', 'next_lesson', 'grammar_section',
-                    'pronunciation_section', 'vocab_section', 'teacher_comments'],
-                array_keys(SessionReport::SCORE_FIELDS),
-            )),
-            'average' => $report->averageScore(),
-        ]);
-    }
-
-    // ---------------------------------------------------------------- internals
 
     /**
      * The report filed before this one, so "next lesson" from last time is

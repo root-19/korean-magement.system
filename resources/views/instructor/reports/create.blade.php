@@ -178,8 +178,12 @@
         @endif
     </div>
 
+    {{-- A filed report submits to its own PUT route: the natural key
+         (instructor, student, class_date) is what earnings match on, so an edit
+         must not be able to carry a different one. Filing a new report still
+         posts the pair. --}}
     <form method="POST"
-          action="{{ route('instructor.reports.store') }}"
+          action="{{ $report ? route('instructor.reports.update', $report) : route('instructor.reports.store') }}"
           class="space-y-4"
           x-data="{
               rows: @js($initialRows),
@@ -246,8 +250,13 @@
               },
           }">
         @csrf
-        <input type="hidden" name="student_id" value="{{ $student->id }}">
-        <input type="hidden" name="class_date" value="{{ $date }}">
+
+        @if ($report)
+            @method('PUT')
+        @else
+            <input type="hidden" name="student_id" value="{{ $student->id }}">
+            <input type="hidden" name="class_date" value="{{ $date }}">
+        @endif
 
         {{-- ─────────────────────────────────────── Lesson information ───── --}}
         <section class="card p-4">

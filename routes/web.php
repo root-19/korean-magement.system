@@ -85,10 +85,17 @@ Route::middleware(['auth', 'role:instructor,admin'])
         Route::post('/students', [StudentController::class, 'store'])->name('students.store');
         Route::get('/students/{student}', [StudentController::class, 'show'])->name('students.show');
 
-        // Post-class reports (legacy: "feedback")
+        // Post-class reports (legacy: "feedback").
+        //
+        // `new` is declared before `{report}` so it is not swallowed as a route
+        // parameter. `edit`/`update` are bound to the report rather than to
+        // (student, date) because an instructor must still be able to open what
+        // they wrote after the student was archived or reassigned.
         Route::get('/reports', [SessionReportController::class, 'index'])->name('reports.index');
         Route::get('/reports/new', [SessionReportController::class, 'create'])->name('reports.create');
         Route::post('/reports', [SessionReportController::class, 'store'])->name('reports.store');
+        Route::get('/reports/{report}/edit', [SessionReportController::class, 'edit'])->name('reports.edit');
+        Route::put('/reports/{report}', [SessionReportController::class, 'update'])->name('reports.update');
         Route::get('/reports/{report}', [SessionReportController::class, 'show'])->name('reports.show');
 
         // Own weekly availability — what the public schedule table reads.

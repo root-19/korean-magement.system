@@ -396,6 +396,52 @@ class InstructorPagesTest extends TestCase
             ->assertDontSee('A998 Pending One');
     }
 
+    /**
+     * The dropdown and the validation rule are both built from
+     * config('academy.learning_times'), so a duration offered on the form is
+     * necessarily accepted on save.
+     */
+    #[Test]
+    public function the_enrolment_form_offers_every_configured_duration(): void
+    {
+        $html = $this->actingAs($this->instructor)
+            ->get(route('instructor.students.create'))
+            ->assertOk()
+            ->getContent();
+
+        foreach (config('academy.learning_times') as $minutes) {
+            $this->assertStringContainsString('value="'.$minutes.'"', $html);
+            $this->assertStringContainsString($minutes.' min', $html);
+        }
+
+        // The short durations the shortest lessons are booked at.
+        $this->assertContains(10, config('academy.learning_times'));
+        $this->assertContains(15, config('academy.learning_times'));
+    }
+
+    #[Test]
+    public function a_short_lesson_can_be_enrolled_and_prices_pro_rata(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.students.store'), [
+                'name' => 'A997 Short Lesson',
+                'teaching_method' => 'audio',
+                'learning_time' => 15,
+                'sessions_purchased' => 10,
+                'schedule' => [1 => '18:30'],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $student = User::where('name', 'A997 Short Lesson')->firstOrFail();
+        $profile = StudentProfile::where('user_id', $student->id)->firstOrFail();
+
+        $this->assertSame(15, $profile->learning_time);
+
+        // A quarter of an hour bills a quarter of the method's hourly rate.
+        $rate = config('academy.rates.audio');
+        $this->assertEqualsWithDelta($rate / 4, $profile->sessionValue(), 0.01);
+    }
+
     #[Test]
     public function enrolling_requires_a_plan(): void
     {
