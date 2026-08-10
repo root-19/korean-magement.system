@@ -26,7 +26,7 @@
 @if ($roster->isEmpty())
     <x-empty-state icon="calendar"
                    title="No classes on {{ \Carbon\Carbon::parse($date)->format('l, F j') }}"
-                   message="This roster comes from each student's weekly timetable. Students with no slot that day do not appear.">
+                   message="This roster lists each student timetabled that day, plus any makeup class moved onto it.">
         <a href="{{ route('instructor.students.index') }}" class="btn-secondary btn-sm">View students</a>
     </x-empty-state>
 @else
@@ -72,10 +72,9 @@
                                         <span class="badge-brand mt-0.5">
                                             Taught early · covers {{ $session->scheduled_date->format('M j') }}
                                         </span>
-                                    @elseif ($session?->rescheduled_date?->toDateString() === $dateString
-                                             && ! $session->scheduled_date->isSameDay($session->rescheduled_date))
+                                    @elseif ($row['makeup_for'])
                                         <span class="badge-warning mt-0.5">
-                                            Makeup for {{ $session->scheduled_date->format('M j') }}
+                                            Makeup for {{ $row['makeup_for']->format('M j') }}
                                         </span>
                                     @elseif ($row['is_extra'])
                                         {{-- Not their usual weekday: say why they are listed. --}}

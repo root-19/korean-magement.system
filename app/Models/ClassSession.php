@@ -4,6 +4,7 @@ namespace App\Models;
 
 use App\Enums\Party;
 use App\Enums\SessionStatus;
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -21,6 +22,20 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 class ClassSession extends Model
 {
     use HasFactory;
+
+    /**
+     * How the legacy app recorded a makeup, and still how nearly every makeup in
+     * the database is stored.
+     *
+     * Legacy wrote a SECOND row, on the makeup date, unmarked, with the agreed
+     * hour in `makeup_time` and this prefix plus the original date in
+     * `postpone_reason` (app/views/instructor/classes.php). The rewrite records
+     * the same fact the other way round — `rescheduled_date` on the postponed
+     * row, no second row — but the import copied the legacy rows across
+     * untouched, so both shapes are live and anything reading makeups has to
+     * understand each of them.
+     */
+    private const MAKEUP_MARKER = 'Rescheduled from ';
 
     protected $fillable = [
         'instructor_id',
@@ -122,6 +137,41 @@ class ClassSession extends Model
     public function isEarly(): bool
     {
         return $this->held_date !== null;
+    }
+
+    /**
+     * The date this row is a makeup for, when the makeup itself IS this row.
+     *
+     * Legacy shape only — see MAKEUP_MARKER. Null for a postponed original in
+     * the current shape: that row is the class being moved, not the makeup, and
+     * points forward via `rescheduled_date` instead.
+     */
+    public function makeupOrigin(): ?CarbonImmutable
+    {
+        $reason = (string) $this->postpone_reason;
+
+        if (! str_starts_with($reason, self::MAKEUP_MARKER)) {
+            return null;
+        }
+
+        try {
+            return CarbonImmutable::parse(trim(substr($reason, strlen(self::MAKEUP_MARKER))));
+        } catch (\Throwable) {
+            // Free text an instructor typed that happens to start the same way.
+            return null;
+        }
+    }
+
+    /**
+     * When this class starts.
+     *
+     * A makeup keeps its own agreed hour: it lands on whatever day the student
+     * can come back, which is often a weekday they have no timetable slot on at
+     * all, so `scheduled_time` is empty and `makeup_time` holds the real time.
+     */
+    public function startTime(): ?string
+    {
+        return $this->scheduled_time ?: $this->makeup_time;
     }
 
     public function isSettled(): bool

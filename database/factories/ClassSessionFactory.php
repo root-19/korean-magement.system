@@ -79,4 +79,22 @@ class ClassSessionFactory extends Factory
     {
         return $this->state(fn () => ['scheduled_date' => $date]);
     }
+
+    /**
+     * A makeup in the legacy shape: its own unmarked row on the makeup date,
+     * pointing back at the class it replaces through postpone_reason, with the
+     * agreed hour in makeup_time rather than scheduled_time.
+     *
+     * This is how nearly every makeup in the database is stored — the import
+     * copied them across untouched — so it is the shape worth testing against.
+     */
+    public function makeupFor(string $originalDate, string $time = '12:00:00'): static
+    {
+        return $this->state(fn () => [
+            'status' => null,
+            'scheduled_time' => null,
+            'makeup_time' => $time,
+            'postpone_reason' => 'Rescheduled from '.$originalDate,
+        ]);
+    }
 }

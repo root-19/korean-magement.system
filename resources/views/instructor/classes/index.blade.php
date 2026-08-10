@@ -57,8 +57,8 @@
 
         @if ($roster->isEmpty())
             <x-empty-state icon="calendar"
-                           title="No classes on {{ $date->format('l') }}s"
-                           message="This roster is built from each student's weekly timetable. Students with no {{ $date->format('l') }} slot do not appear here." />
+                           title="No classes on {{ $date->format('l, F j') }}"
+                           message="This roster lists each student timetabled that day, plus any makeup class moved onto it." />
         @else
             <div class="table-wrap">
                 <table class="table">
@@ -103,6 +103,13 @@
                                                 <span class="badge-brand mt-0.5">
                                                     Taught early {{ $session->held_date->format('M j') }}
                                                 </span>
+                                            @elseif ($row['makeup_for'])
+                                                <span class="badge-warning mt-0.5">
+                                                    Makeup for {{ $row['makeup_for']->format('M j') }}
+                                                </span>
+                                            @elseif ($row['is_extra'])
+                                                {{-- Not their usual weekday: say why they are listed. --}}
+                                                <span class="badge-neutral mt-0.5">Off timetable</span>
                                             @endif
                                         </span>
                                     </a>

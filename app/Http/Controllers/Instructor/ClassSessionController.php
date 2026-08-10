@@ -2,15 +2,14 @@
 
 namespace App\Http\Controllers\Instructor;
 
-use App\Enums\EnrollmentStatus;
 use App\Enums\Party;
 use App\Enums\SessionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceRequest;
 use App\Models\ClassSession;
-use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\Attendance\AttendanceService;
+use App\Support\DayRoster;
 use App\Support\MakeupSchedule;
 use App\Support\PayoutWindow;
 use Carbon\CarbonImmutable;
@@ -18,7 +17,6 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -316,73 +314,17 @@ class ClassSessionController extends Controller
     }
 
     /**
-     * The students scheduled on $date, each with that day's session if any.
+     * The students with class on $date, each with that day's session if any.
      *
-     * Driven from student_schedules, so "who has class on a Wednesday" is an
-     * indexed integer match. The legacy query did
-     * `WHERE u.schedule LIKE '%Wednesday%'` against a comma-joined string, then
-     * read the matching `<day>_time` column by building the column name in PHP.
+     * Shared with the dashboard so the two pages cannot disagree about who has
+     * class — this one used to list the weekly timetable and nothing else, which
+     * left every makeup off it.
      *
-     * @return Collection<int, array{student: User, profile: ?StudentProfile, time: ?string, session: ?ClassSession, has_report: bool}>
+     * @return Collection<int, array<string, mixed>>
      */
     private function rosterFor(int $instructorId, CarbonImmutable $date): Collection
     {
-        $isoDay = $date->dayOfWeekIso;
-
-        $students = User::query()
-            ->select('users.*')
-            ->join('student_profiles as sp', 'sp.user_id', '=', 'users.id')
-            ->join('student_schedules as ss', function ($join) use ($isoDay) {
-                $join->on('ss.student_id', '=', 'users.id')->where('ss.day_of_week', '=', $isoDay);
-            })
-            ->with(['studentProfile', 'schedules'])
-            ->where('sp.instructor_id', $instructorId)
-            ->where('sp.enrollment_status', EnrollmentStatus::Approved)
-            ->where('users.is_active', true)
-            ->addSelect('ss.start_time as slot_time')
-            ->orderByRaw('ss.start_time IS NULL, ss.start_time')
-            ->orderBy('users.name')
-            ->get();
-
-        // One extra query for the whole day's sessions rather than one per row.
-        $sessions = ClassSession::query()
-            ->with('report:id,class_session_id,instructor_id,student_id,class_date')
-            ->where('instructor_id', $instructorId)
-            ->whereDate('scheduled_date', $date->toDateString())
-            ->get()
-            ->keyBy('student_id');
-
-        $dateString = $date->toDateString();
-
-        // Whether each class is still open to marking: today is, an earlier day
-        // needs an approved request. Fetched once for the whole roster.
-        $requests = AttendanceRequest::query()
-            ->where('instructor_id', $instructorId)
-            ->whereDate('class_date', $dateString)
-            ->get()
-            ->keyBy('student_id');
-
-        // Reports are matched on the natural key, the same way the earnings
-        // query does, so historical rows with no resolved FK still count.
-        $reported = DB::table('session_reports')
-            ->where('instructor_id', $instructorId)
-            ->whereIn('student_id', $students->pluck('id'))
-            ->pluck('class_date', 'student_id');
-
-        return $students->map(function (User $student) use ($sessions, $reported, $date, $requests) {
-            $session = $sessions->get($student->id);
-            $paidDate = $session?->paid_date?->toDateString() ?? $date->toDateString();
-
-            return [
-                'student' => $student,
-                'profile' => $student->studentProfile,
-                'time' => $student->slot_time,
-                'session' => $session,
-                'has_report' => isset($reported[$student->id])
-                    && (string) $reported[$student->id] === $paidDate,
-                'request' => $requests->get($student->id),
-            ];
-        });
+        return DayRoster::for($instructorId, $date);
     }
 
     private function resolveDate(?string $raw): CarbonImmutable

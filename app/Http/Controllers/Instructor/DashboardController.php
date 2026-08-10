@@ -6,11 +6,10 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\Party;
 use App\Enums\SessionStatus;
 use App\Http\Controllers\Controller;
-use App\Models\AttendanceRequest;
 use App\Models\ClassSession;
 use App\Models\StudentProfile;
-use App\Models\User;
 use App\Services\Earnings\EarningsCalculator;
+use App\Support\DayRoster;
 use App\Support\PayoutWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -78,96 +77,11 @@ class DashboardController extends Controller
     /**
      * Who is scheduled on a date, with that day's session if one exists.
      *
-     * Three groups appear, matching the legacy dashboard:
-     *   1. students whose weekly timetable falls on this weekday;
-     *   2. students already marked on this date (so a marked class stays visible
-     *      even when it is not their usual day);
-     *   3. students whose class was rescheduled TO this date.
-     *
      * @return Collection<int, array<string, mixed>>
      */
     private function rosterFor(int $instructorId, CarbonImmutable $date): Collection
     {
-        $isoDay = $date->dayOfWeekIso;
-        $dateString = $date->toDateString();
-
-        // Group 1 — the weekly timetable.
-        $scheduled = User::query()
-            ->select('users.*')
-            ->addSelect('ss.start_time as slot_time')
-            ->join('student_profiles as sp', 'sp.user_id', '=', 'users.id')
-            ->join('student_schedules as ss', function ($join) use ($isoDay) {
-                $join->on('ss.student_id', '=', 'users.id')->where('ss.day_of_week', '=', $isoDay);
-            })
-            // `schedules` feeds MakeupSchedule in the roster partial: postponing a
-            // class needs the student's timetable to know where it lands.
-            ->with(['studentProfile', 'schedules'])
-            ->where('sp.instructor_id', $instructorId)
-            ->where('sp.enrollment_status', EnrollmentStatus::Approved)
-            ->where('users.is_active', true)
-            ->get()
-            ->keyBy('id');
-
-        // Groups 2 and 3 — anyone with a session on this date, scheduled or not.
-        $sessions = ClassSession::query()
-            ->with(['student.studentProfile', 'student.schedules'])
-            ->where('instructor_id', $instructorId)
-            ->where(fn ($q) => $q->where('scheduled_date', $dateString)
-                ->orWhere('paid_date', $dateString)
-                ->orWhere('rescheduled_date', $dateString))
-            ->get();
-
-        $rows = collect();
-
-        foreach ($scheduled as $student) {
-            $rows->put($student->id, [
-                'student' => $student,
-                'profile' => $student->studentProfile,
-                'time' => $student->slot_time,
-                'session' => null,
-                'is_extra' => false,
-            ]);
-        }
-
-        foreach ($sessions as $session) {
-            $existing = $rows->get($session->student_id);
-
-            $rows->put($session->student_id, [
-                'student' => $existing['student'] ?? $session->student,
-                'profile' => $existing['profile'] ?? $session->student?->studentProfile,
-                'time' => $existing['time'] ?? $session->scheduled_time,
-                'session' => $session,
-                // Flagged so the view can say why an off-timetable student is here.
-                'is_extra' => $existing === null,
-            ]);
-        }
-
-        // Whether each class is still open to marking: today is, an earlier day
-        // needs an approved request. Fetched once for the whole roster.
-        $requests = AttendanceRequest::query()
-            ->where('instructor_id', $instructorId)
-            ->whereDate('class_date', $dateString)
-            ->get()
-            ->keyBy('student_id');
-
-        // Report existence, matched on the natural key the earnings query uses.
-        $reported = DB::table('session_reports')
-            ->where('instructor_id', $instructorId)
-            ->whereIn('student_id', $rows->keys())
-            ->where('class_date', $dateString)
-            ->pluck('student_id')
-            ->flip();
-
-        return $rows
-            ->map(function (array $row) use ($reported, $requests) {
-                $row['has_report'] = $reported->has($row['student']?->id);
-                $row['request'] = $requests->get($row['student']?->id);
-
-                return $row;
-            })
-            ->filter(fn (array $row) => $row['student'] !== null)
-            ->sortBy(fn (array $row) => [$row['time'] === null, $row['time'], $row['student']->name])
-            ->values();
+        return DayRoster::for($instructorId, $date);
     }
 
     /**

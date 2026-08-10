@@ -66,7 +66,13 @@ class AttendanceService
                 'status' => $status,
                 'absent_by' => $status === SessionStatus::Absent ? $absentBy : null,
                 'postponed_by' => $status === SessionStatus::Postponed ? $absentBy : null,
-                'postpone_reason' => $reason,
+                // A makeup row keeps the class it replaces in postpone_reason —
+                // the legacy shape, and still how nearly every makeup is stored
+                // (ClassSession::MAKEUP_MARKER). Teaching it is no reason to
+                // forget that, and the "Present" button posts no reason at all,
+                // so the marker has to survive a null. Legacy was careful about
+                // this too; see the comment in ClassModel::adjustStudentMetrics.
+                'postpone_reason' => $reason ?? ($session->makeupOrigin() ? $session->postpone_reason : null),
                 'marked_by' => $instructor->id,
                 'marked_at' => now(),
             ]);
