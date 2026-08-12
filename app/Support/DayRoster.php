@@ -20,6 +20,10 @@ use Illuminate\Support\Facades\DB;
  *      marked off-timetable stays visible;
  *   3. students whose class was postponed TO this date.
  *
+ * Students who have used up every prepaid session are then dropped — see
+ * withoutFinishedStudents, which holds their row for 24 hours after the class
+ * that finished them so the report can still be filed from it.
+ *
  * Group 3 is the one that keeps going missing. A makeup lands on whatever day
  * the student can come back, very often a weekday they have no slot on at all,
  * so a timetable-only roster shows nothing and the class quietly goes untaught
@@ -100,11 +104,55 @@ final class DayRoster
             ]);
         }
 
-        $rows = $rows->filter(fn (array $row) => $row['student'] !== null);
+        $rows = self::withoutFinishedStudents(
+            $rows->filter(fn (array $row) => $row['student'] !== null),
+            $instructorId,
+        );
 
         return self::withReportsAndRequests($rows, $instructorId, $dateString)
             ->sortBy(fn (array $row) => [$row['time'] === null, $row['time'], $row['student']->name])
             ->values();
+    }
+
+    /**
+     * Drop students who have used up every prepaid session — legacy hid them the
+     * same way, on both the dashboard and the class list.
+     *
+     * Marking the last class takes sessions_remaining to 0 the instant it saves,
+     * so hiding on that alone would pull the row out from under the instructor
+     * who just marked it — and the report is filed from that row. Two things keep
+     * a finished student on a day:
+     *
+     *   1. a record of their own on this date — their final class, or a makeup
+     *      that landed here;
+     *   2. a marking made in the last 24 hours, wherever it sits.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     * @return Collection<int, array<string, mixed>>
+     */
+    private static function withoutFinishedStudents(Collection $rows, int $instructorId): Collection
+    {
+        $finished = $rows->filter(fn (array $row) => ! ($row['profile']?->hasSessionsRemaining() ?? false)
+            && $row['session']?->status === null
+            && $row['makeup_for'] === null);
+
+        if ($finished->isEmpty()) {
+            return $rows;
+        }
+
+        $justMarked = ClassSession::query()
+            ->where('instructor_id', $instructorId)
+            ->whereIn('student_id', $finished->keys())
+            ->whereNotNull('status')
+            ->where('marked_at', '>=', CarbonImmutable::now()->subDay())
+            ->pluck('student_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+
+        return $rows->reject(
+            fn (array $row, int $studentId) => $finished->has($studentId)
+                && ! in_array($studentId, $justMarked, true)
+        );
     }
 
     /**

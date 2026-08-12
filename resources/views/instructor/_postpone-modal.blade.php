@@ -23,6 +23,16 @@
         manualDate: '',
         time: '',
 
+        // A student can have dozens of classes left, and the full preview then
+        // pushes the time field and the buttons off the modal. Only the first
+        // few dates show until the instructor asks for the rest.
+        previewLimit: 4,
+        previewOpen: false,
+
+        get previewHidden() {
+            return Math.max(0, (this.row?.makeup.preview.length ?? 0) - this.previewLimit);
+        },
+
         start(detail) {
             this.row = detail;
             // No timetable means no slot to append to, so there is nothing to
@@ -30,6 +40,7 @@
             this.mode = detail.makeup.autoDate ? 'auto' : 'manual';
             this.manualDate = detail.makeup.autoDate || detail.makeup.minDate;
             this.time = detail.makeup.defaultTime || '';
+            this.previewOpen = false;
             this.show = true;
         },
      }"
@@ -120,16 +131,31 @@
 
                                     <span class="mt-2 block rounded-md bg-gray-900/60 p-2 text-[11px] leading-relaxed">
                                         <span class="block text-gray-500">Schedule preview</span>
-                                        <span class="mt-1 block text-danger-400">
-                                            <s x-text="row.dateShort"></s> postponed
-                                        </span>
-                                        <template x-for="slot in row.makeup.preview" x-bind:key="slot.label">
-                                            <span class="block"
-                                                  x-bind:class="slot.isMakeup ? 'text-success-400 font-medium' : 'text-gray-400'">
-                                                <span x-text="slot.label"></span>
-                                                <span x-show="slot.isMakeup">— makeup class</span>
+
+                                        <span class="block"
+                                              x-bind:class="previewOpen ? 'max-h-48 overflow-y-auto pr-1' : ''">
+                                            <span class="block text-danger-400">
+                                                <s x-text="row.dateShort"></s> postponed
                                             </span>
-                                        </template>
+                                            <template x-for="(slot, i) in row.makeup.preview" x-bind:key="slot.label">
+                                                <span class="block"
+                                                      x-show="previewOpen || i < previewLimit"
+                                                      x-bind:class="slot.isMakeup ? 'text-success-400 font-medium' : 'text-gray-400'">
+                                                    <span x-text="slot.label"></span>
+                                                    <span x-show="slot.isMakeup">— makeup class</span>
+                                                </span>
+                                            </template>
+                                        </span>
+
+                                        {{-- Inside a <label>, so the click must not reach it and flip the radio. --}}
+                                        <button type="button"
+                                                x-show="previewHidden > 0"
+                                                x-on:click.prevent.stop="previewOpen = ! previewOpen"
+                                                class="mt-1.5 font-medium text-brand-400 hover:text-accent-400"
+                                                x-text="previewOpen
+                                                    ? 'See less'
+                                                    : 'See more (' + previewHidden + ' more ' + (previewHidden === 1 ? 'class' : 'classes') + ')'">
+                                        </button>
                                     </span>
                                 </span>
                             </label>

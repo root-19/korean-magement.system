@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\EnrollmentStatus;
+use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Models\StudentSchedule;
 use App\Models\User;
@@ -133,6 +134,38 @@ class InstructorDashboardTest extends TestCase
             ->assertSee('Upcoming classes for '.$nextWeek->format('F j, Y'))
             ->assertSee('A900 Tomorrow Only')
             ->assertDontSee('Total present time');
+    }
+
+    #[Test]
+    public function a_student_with_no_sessions_left_drops_off_the_roster(): void
+    {
+        $this->tomorrowStudent->studentProfile->update(['sessions_remaining' => 0]);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertDontSee('A900 Tomorrow Only');
+    }
+
+    #[Test]
+    public function a_finished_student_stays_on_the_day_their_last_class_was_marked(): void
+    {
+        // Their final class still owes a report, so the row has to survive on the
+        // date it was taught -- it only disappears from the days after it.
+        $yesterday = now()->subDay();
+
+        $this->tomorrowStudent->studentProfile->update(['sessions_remaining' => 0]);
+
+        ClassSession::factory()->present()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $this->tomorrowStudent->id,
+            'scheduled_date' => $yesterday->toDateString(),
+        ]);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.dashboard', ['date' => $yesterday->toDateString()]))
+            ->assertOk()
+            ->assertSee('A900 Tomorrow Only');
     }
 
     #[Test]

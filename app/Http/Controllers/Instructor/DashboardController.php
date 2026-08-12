@@ -160,6 +160,10 @@ class DashboardController extends Controller
             ->where('sp.instructor_id', $instructorId)
             ->where('sp.enrollment_status', EnrollmentStatus::Approved->value)
             ->where('users.is_active', true)
+            // Follows withoutFinishedStudents: a used-up student is off the
+            // roster, so their slot must not put an upcoming dot on a future day
+            // that renders empty.
+            ->where('sp.sessions_remaining', '>', 0)
             ->distinct()
             ->get()
             ->groupBy('day')

@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\BookingStatus;
 use App\Enums\EnrollmentStatus;
 use App\Models\Booking;
+use App\Models\ClassSession;
 use App\Models\InstructorAvailability;
 use App\Models\StudentProfile;
 use App\Models\StudentSchedule;
@@ -394,6 +395,83 @@ class InstructorPagesTest extends TestCase
             ->get(route('instructor.classes.index'))
             ->assertOk()
             ->assertDontSee('A998 Pending One');
+    }
+
+    #[Test]
+    public function the_class_list_drops_a_student_with_no_sessions_left(): void
+    {
+        // Same rule as the dashboard — DayRoster hides them for both pages, so
+        // the two cannot disagree about who still has class.
+        $this->finishedStudent();
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index'))
+            ->assertOk()
+            ->assertDontSee('A997 Finished');
+    }
+
+    #[Test]
+    public function a_finished_student_is_held_for_24_hours_after_their_last_marking(): void
+    {
+        // Marking a student's last class takes them to 0 the instant it saves,
+        // so hiding them on the spot would pull the row out from under the
+        // instructor who just marked it. Yesterday's marking still lists them
+        // today; tomorrow it will not.
+        $student = $this->finishedStudent();
+
+        ClassSession::factory()->present()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $student->id,
+            'scheduled_date' => now()->subDay()->toDateString(),
+            'marked_at' => now()->subHours(2),
+        ]);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index'))
+            ->assertOk()
+            ->assertSee('A997 Finished');
+    }
+
+    #[Test]
+    public function the_hold_lapses_once_the_last_marking_is_a_day_old(): void
+    {
+        $student = $this->finishedStudent();
+
+        ClassSession::factory()->present()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $student->id,
+            'scheduled_date' => now()->subDay()->toDateString(),
+            'marked_at' => now()->subDay()->subMinute(),
+        ]);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index'))
+            ->assertOk()
+            ->assertDontSee('A997 Finished');
+    }
+
+    /**
+     * A student out of prepaid sessions, timetabled today so only the finished
+     * rule can keep them off the class list.
+     */
+    private function finishedStudent(): User
+    {
+        $student = User::factory()->student()->create(['name' => 'A997 Finished']);
+
+        StudentProfile::factory()->create([
+            'user_id' => $student->id,
+            'instructor_id' => $this->instructor->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+            'sessions_remaining' => 0,
+        ]);
+
+        StudentSchedule::create([
+            'student_id' => $student->id,
+            'day_of_week' => now()->dayOfWeekIso,
+            'start_time' => '09:00:00',
+        ]);
+
+        return $student;
     }
 
     /**

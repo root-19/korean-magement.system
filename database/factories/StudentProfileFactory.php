@@ -23,7 +23,10 @@ class StudentProfileFactory extends Factory
             'instructor_id' => User::factory()->instructor(),
             'teaching_method' => fake()->randomElement(TeachingMethod::cases()),
             'learning_time' => fake()->randomElement([20, 25, 30]),
-            'sessions_remaining' => fake()->numberBetween(0, 30),
+            // Never 0 by chance: a student with no sessions left is dropped from
+            // the dashboard roster, so a random 0 would make any test that looks
+            // for a student on the page flake. Finished students set it by hand.
+            'sessions_remaining' => fake()->numberBetween(1, 30),
             'sessions_attended' => fake()->numberBetween(0, 40),
             'sessions_deducted' => 0,
             'is_regular' => true,
