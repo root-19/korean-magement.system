@@ -6,6 +6,7 @@ use App\Enums\BookingStatus;
 use App\Enums\EnrollmentStatus;
 use App\Models\AttendanceRequest;
 use App\Models\Booking;
+use App\Models\StudentDeletionRequest;
 use App\Models\StudentProfile;
 use App\Models\User;
 use Illuminate\Support\Facades\Route;
@@ -128,6 +129,12 @@ final class Navigation
                         'user-plus',
                         badge: self::pendingEnrollmentCount(),
                     ),
+                    self::item(
+                        'Deletion Requests',
+                        'admin.deletions.index',
+                        'trash',
+                        badge: self::pendingDeletionCount(),
+                    ),
                     self::item('Student Sessions', 'admin.students.index', 'refresh', query: ['filter' => 'no_sessions']),
                     self::item('Trial Students', 'admin.students.index', 'user-plus', query: ['filter' => 'unassigned']),
                 ],
@@ -165,6 +172,16 @@ final class Navigation
                 ],
             ],
         ];
+    }
+
+    /** Students an instructor has asked to have removed; nobody goes without a decision here. */
+    private static function pendingDeletionCount(): int
+    {
+        if (! Schema::hasTable('student_deletion_requests')) {
+            return 0;
+        }
+
+        return StudentDeletionRequest::query()->pending()->count();
     }
 
     /** Late-attendance requests waiting on a decision; an instructor is unpaid until then. */

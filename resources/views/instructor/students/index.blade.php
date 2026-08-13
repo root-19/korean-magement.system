@@ -61,11 +61,15 @@
                             <th class="text-center">Attended</th>
                             <th class="text-center">Remaining</th>
                             <th>Status</th>
+                            <th><span class="sr-only">Actions</span></th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($students as $profile)
-                            @php $student = $profile->user; @endphp
+                            @php
+                                $student = $profile->user;
+                                $deletion = $deletionRequests[$student->id] ?? null;
+                            @endphp
                             <tr>
                                 <td>
                                     <a href="{{ route('instructor.students.show', $student) }}"
@@ -130,6 +134,40 @@
                                         </span>
                                     @endif
                                 </td>
+
+                                {{-- Delete is a request, not an action: approving it is
+                                     what removes the student, and it removes the classes
+                                     taught to them too. --}}
+                                <td class="text-right">
+                                    @if ($deletion?->isPending())
+                                        <span class="badge-warning" title="Waiting for an admin to decide">
+                                            Deletion pending
+                                        </span>
+                                    @else
+                                        <div class="flex items-center justify-end gap-1.5">
+                                            @if ($deletion?->isRejected())
+                                                <span class="badge-danger"
+                                                      title="{{ $deletion->decision_note ?: 'No note left' }}">
+                                                    Delete refused
+                                                </span>
+                                            @endif
+
+                                            <button type="button"
+                                                    class="btn-danger btn-sm"
+                                                    aria-label="Request deletion of {{ $student->name }}"
+                                                    x-data
+                                                    x-on:click="$dispatch('open-delete-modal', @js([
+                                                        'studentName' => $student->name,
+                                                        'action' => route('instructor.students.deletion', $student),
+                                                        'sessions' => (int) ($sessionCounts[$student->id] ?? 0),
+                                                        'rejectedNote' => $deletion?->decision_note,
+                                                    ]))">
+                                                <x-icon name="trash" class="h-4 w-4" />
+                                                Delete
+                                            </button>
+                                        </div>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -143,4 +181,6 @@
             @endif
         @endif
     </x-card>
+
+    @include('instructor.students._delete-modal')
 @endsection

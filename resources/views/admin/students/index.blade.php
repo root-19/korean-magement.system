@@ -127,7 +127,11 @@
                                 </td>
 
                                 <td>
-                                    @if ($student && ! $student->is_active)
+                                    @if ($student?->trashed())
+                                        {{-- Deleted, not archived: an approved deletion
+                                             request took them out of the app entirely. --}}
+                                        <span class="badge-danger">Deleted</span>
+                                    @elseif ($student && ! $student->is_active)
                                         <span class="badge-neutral">Archived</span>
                                     @else
                                         <span class="{{ $profile->enrollment_status->badgeClass() }}">

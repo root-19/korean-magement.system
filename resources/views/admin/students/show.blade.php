@@ -163,6 +163,16 @@
             </x-card>
 
             <x-card title="Account">
+                @if ($student->trashed())
+                    <p class="mb-3 rounded-lg border border-danger-500/30 bg-danger-500/10 px-3 py-2 text-xs text-danger-400">
+                        Deleted {{ $student->deleted_at->format('M j, Y') }}
+                        @if ($student->deletedBy)
+                            by {{ $student->deletedBy->name }}
+                        @endif.
+                        They are gone from every list and cannot sign in. Restoring puts them back.
+                    </p>
+                @endif
+
                 <form method="POST" action="{{ route('admin.students.status', $student) }}"
                       onsubmit="return confirm('{{ $student->is_active ? 'Archive' : 'Restore' }} {{ $student->name }}?')">
                     @csrf
@@ -173,8 +183,8 @@
                 </form>
 
                 <p class="mt-3 text-xs text-gray-500">
-                    Archiving keeps every attendance and report row, so the instructor's
-                    earnings are unaffected. Nothing is ever hard-deleted.
+                    Archiving and deleting both keep every attendance and report row, so the
+                    instructor's earnings are unaffected either way. Nothing is ever hard-deleted.
                 </p>
             </x-card>
         </div>

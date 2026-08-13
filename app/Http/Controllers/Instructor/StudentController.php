@@ -7,12 +7,15 @@ use App\Enums\SessionStatus;
 use App\Enums\TeachingMethod;
 use App\Http\Controllers\Controller;
 use App\Models\ClassSession;
+use App\Models\StudentDeletionRequest;
 use App\Models\StudentProfile;
 use App\Models\StudentSchedule;
 use App\Models\User;
+use App\Services\Enrollment\StudentDeletionService;
 use App\Services\Enrollment\StudentEnroller;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\View\View;
 
 class StudentController extends Controller
@@ -41,11 +44,59 @@ class StudentController extends Controller
             ->paginate(25)
             ->withQueryString();
 
+        $studentIds = $students->pluck('user_id')->all();
+
         return view('instructor.students.index', [
             'students' => $students,
             'search' => $search,
             'showingArchived' => $request->query('status') === 'archived',
+            'deletionRequests' => $this->deletionRequestsFor($instructor->id, $studentIds),
+            // What a deletion carries with it, so the modal can say so before the
+            // instructor asks for one.
+            'sessionCounts' => $this->sessionCountsFor($studentIds),
         ]);
+    }
+
+    /**
+     * Open delete requests for the students on this page, keyed by student id.
+     *
+     * One query for the page: the row needs to know whether to offer the Delete
+     * button, say it is already waiting on an admin, or show why it was refused.
+     *
+     * @param  array<int, int>  $studentIds
+     * @return Collection<int, StudentDeletionRequest>
+     */
+    private function deletionRequestsFor(int $instructorId, array $studentIds)
+    {
+        if ($studentIds === []) {
+            return collect();
+        }
+
+        return StudentDeletionRequest::query()
+            ->forInstructor($instructorId)
+            ->whereIn('student_id', $studentIds)
+            ->whereIn('status', [StudentDeletionRequest::PENDING, StudentDeletionRequest::REJECTED])
+            ->get()
+            ->keyBy('student_id');
+    }
+
+    /**
+     * Recorded classes per student on this page, keyed by student id.
+     *
+     * @param  array<int, int>  $studentIds
+     * @return Collection<int, int>
+     */
+    private function sessionCountsFor(array $studentIds)
+    {
+        if ($studentIds === []) {
+            return collect();
+        }
+
+        return ClassSession::query()
+            ->selectRaw('student_id, COUNT(*) as total')
+            ->whereIn('student_id', $studentIds)
+            ->groupBy('student_id')
+            ->pluck('total', 'student_id');
     }
 
     /**
@@ -123,6 +174,52 @@ class StudentController extends Controller
             'sessions' => $sessions,
             'stats' => $this->stats($instructor->id, $student->id, $profile),
         ]);
+    }
+
+    /**
+     * Ask an admin to delete a student.
+     *
+     * The instructor never deletes anyone: an admin approval is what removes the
+     * student. All this endpoint does is record the request and the reason given
+     * for it.
+     */
+    public function requestDeletion(
+        Request $request,
+        User $student,
+        StudentDeletionService $deletions,
+    ): RedirectResponse {
+        $instructor = $request->user();
+
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'min:5', 'max:1000'],
+        ]);
+
+        $this->assertTeaches($instructor, $student);
+
+        $deletions->request($instructor, $student, $data['reason']);
+
+        return redirect()
+            ->route('instructor.students.index')
+            ->with('success', sprintf(
+                'Delete request sent for %s. Nothing is removed until an admin approves it.',
+                $student->name,
+            ));
+    }
+
+    /**
+     * Refuse anyone not assigned to this instructor.
+     *
+     * The button is only rendered on the instructor's own rows, but that is not
+     * what enforces it — the form is a plain POST anyone could replay.
+     */
+    private function assertTeaches(User $instructor, User $student): void
+    {
+        $teaches = StudentProfile::query()
+            ->where('user_id', $student->id)
+            ->forInstructor($instructor->id)
+            ->exists();
+
+        abort_unless($teaches, 403, 'That student is not assigned to you.');
     }
 
     /**

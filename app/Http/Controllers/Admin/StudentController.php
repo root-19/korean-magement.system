@@ -65,6 +65,10 @@ class StudentController extends Controller
     {
         abort_unless($student->role === Role::Student, 404);
 
+        // The Account card names who deleted them; preventLazyLoading would turn
+        // reading it in the view into an error locally.
+        $student->loadMissing('deletedBy:id,name');
+
         $profile = StudentProfile::query()
             ->with(['instructor:id,name', 'user' => fn ($q) => $q->withTrashed(), 'user.schedules'])
             ->where('user_id', $student->id)
@@ -133,17 +137,31 @@ class StudentController extends Controller
      *
      * A soft delete, never a hard one: attendance and reports reference this row,
      * and preserving it is what keeps the instructor's earnings intact.
+     *
+     * Restoring also undoes an approved deletion. The two states are recorded
+     * separately — archived is is_active, deleted is deleted_at — but there is
+     * one way back for both, otherwise a restored student would still be
+     * invisible everywhere and nothing on this page would say why.
      */
     public function toggleStatus(Request $request, User $student): RedirectResponse
     {
         abort_unless($student->role === Role::Student, 404);
 
+        $wasDeleted = $student->trashed();
+
         $student->update(['is_active' => ! $student->is_active]);
+
+        if ($student->is_active && $wasDeleted) {
+            $student->deleted_by = null;
+            $student->save();
+            $student->restore();
+        }
 
         AuditLog::record(
             action: $student->is_active ? 'student.restored' : 'student.archived',
             subject: $student,
             targetName: $student->name,
+            details: $wasDeleted ? ['undeleted' => true] : [],
             userId: $request->user()->id,
         );
 

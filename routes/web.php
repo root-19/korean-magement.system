@@ -1,14 +1,15 @@
 <?php
 
+use App\Http\Controllers\Admin\AttendanceRequestController as AdminEvaluations;
 use App\Http\Controllers\Admin\ClassSessionController as AdminClassSessions;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Admin\EnrollmentController;
 use App\Http\Controllers\Admin\InstructorController as AdminInstructors;
-use App\Http\Controllers\Admin\AttendanceRequestController as AdminEvaluations;
 use App\Http\Controllers\Admin\LearningMaterialController as AdminMaterials;
 use App\Http\Controllers\Admin\OverviewController as AdminOverview;
 use App\Http\Controllers\Admin\PayoutController;
 use App\Http\Controllers\Admin\StudentController as AdminStudents;
+use App\Http\Controllers\Admin\StudentDeletionController as AdminDeletions;
 use App\Http\Controllers\Auth\LoginController;
 use App\Http\Controllers\Instructor\BookingController;
 use App\Http\Controllers\Instructor\ClassListController;
@@ -84,6 +85,11 @@ Route::middleware(['auth', 'role:instructor,admin'])
         Route::get('/students/create', [StudentController::class, 'create'])->name('students.create');
         Route::post('/students', [StudentController::class, 'store'])->name('students.store');
         Route::get('/students/{student}', [StudentController::class, 'show'])->name('students.show');
+
+        // Asking an admin to delete a student. Never the deletion itself — that
+        // lives behind the admin decision below.
+        Route::post('/students/{student}/deletion', [StudentController::class, 'requestDeletion'])
+            ->name('students.deletion');
 
         // Post-class reports (legacy: "feedback").
         //
@@ -180,6 +186,11 @@ Route::middleware(['auth', 'role:admin'])
             ->name('enrollments.reject');
         Route::patch('/enrollments/{enrollment}/reinstate', [EnrollmentController::class, 'reinstate'])
             ->name('enrollments.reinstate');
+
+        // Deletion approval queue. Approving is what deletes the student, so it
+        // is a decision here and nothing more than a request on the other side.
+        Route::get('/student-deletions', [AdminDeletions::class, 'index'])->name('deletions.index');
+        Route::patch('/student-deletions/{deletion}', [AdminDeletions::class, 'decide'])->name('deletions.decide');
 
         // Classes across all instructors
         Route::get('/classes', [AdminClassSessions::class, 'index'])->name('classes.index');
