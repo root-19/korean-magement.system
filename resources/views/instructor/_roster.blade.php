@@ -66,7 +66,15 @@
                                class="focus-ring flex items-center gap-2.5 rounded">
                                 <x-avatar :user="$student" class="h-8 w-8" />
                                 <span class="min-w-0">
-                                    <span class="block truncate font-medium text-white">{{ $student->name }}</span>
+                                    {{-- Trial rides on the name itself, not in the Type
+                                         column: it is who the student is, while the
+                                         badges below are about this one day. --}}
+                                    <span class="flex items-center gap-1.5">
+                                        <span class="truncate font-medium text-white">{{ $student->name }}</span>
+                                        @if ($profile && ! $profile->is_regular)
+                                            <span class="badge-warning shrink-0">Trial</span>
+                                        @endif
+                                    </span>
 
                                     @if ($session?->isEarly())
                                         <span class="badge-brand mt-0.5">

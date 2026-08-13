@@ -128,7 +128,9 @@ class StudentController extends Controller
             'learning_time' => ['required', 'integer', 'in:'.implode(',', config('academy.learning_times'))],
             'sessions_purchased' => ['required', 'integer', 'min:1', 'max:500'],
             'sessions_deducted' => ['nullable', 'integer', 'min:0', 'max:500'],
-            'is_regular' => ['nullable', 'boolean'],
+            // Required, not defaulted: regular and trial are different kinds of
+            // enrolment and the instructor is the one who knows which this is.
+            'is_regular' => ['required', 'boolean'],
             'start_date' => ['nullable', 'date'],
             'schedule' => ['nullable', 'array'],
             'schedule.*' => ['nullable', 'date_format:H:i'],
@@ -137,7 +139,7 @@ class StudentController extends Controller
         $result = $enroller->enrol(
             actor: $request->user(),
             data: array_merge($data, [
-                'is_regular' => $request->boolean('is_regular', true),
+                'is_regular' => $request->boolean('is_regular'),
                 'schedule' => array_filter($data['schedule'] ?? []),
             ]),
         );

@@ -48,6 +48,38 @@
 
             <x-card title="Plan">
                 <div class="grid gap-4 sm:grid-cols-2">
+                    {{-- Regular or trial, asked outright rather than left to a
+                         single ticked-by-default box. It decides which class list
+                         the student lands on and whether their name carries a
+                         Trial tag on the dashboard and class roster. --}}
+                    <div class="sm:col-span-2" x-data="{ type: '{{ old('is_regular', '') }}' }">
+                        <span class="form-label">Enrolment type</span>
+
+                        <div class="grid gap-2 sm:grid-cols-2">
+                            @foreach ([
+                                '1' => ['Regular', 'Fixed weekly timetable and an ongoing plan.'],
+                                '0' => ['Trial', 'A trial or one-off. Tagged “Trial” on your dashboard and classes.'],
+                            ] as $value => $option)
+                                <label class="flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition"
+                                       x-bind:class="type === '{{ $value }}' ? 'border-brand-400 bg-brand-500/10' : 'border-gray-700'">
+                                    <input type="radio"
+                                           name="is_regular"
+                                           value="{{ $value }}"
+                                           required
+                                           x-model="type"
+                                           @checked(old('is_regular') === $value)
+                                           class="mt-0.5 border-gray-600 bg-gray-800 text-brand-400 focus:ring-brand-400">
+                                    <span class="min-w-0">
+                                        <span class="block text-sm font-medium text-white">{{ $option[0] }}</span>
+                                        <span class="block text-xs text-gray-500">{{ $option[1] }}</span>
+                                    </span>
+                                </label>
+                            @endforeach
+                        </div>
+
+                        @error('is_regular') <p class="form-error">{{ $message }}</p> @enderror
+                    </div>
+
                     <div>
                         <label for="teaching_method" class="form-label">Class type</label>
                         <select id="teaching_method" name="teaching_method" required class="form-select">
@@ -99,13 +131,6 @@
                         @error('start_date') <p class="form-error">{{ $message }}</p> @enderror
                     </div>
 
-                    <div class="flex items-end">
-                        <label class="flex items-center gap-2 text-sm text-gray-300">
-                            <input type="checkbox" name="is_regular" value="1" @checked(old('is_regular', true))
-                                   class="rounded border-gray-600 bg-gray-800 text-brand-400 focus:ring-brand-400">
-                            Regular student
-                        </label>
-                    </div>
                 </div>
             </x-card>
 

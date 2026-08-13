@@ -382,6 +382,7 @@ class InstructorPagesTest extends TestCase
                 'teaching_method' => 'audio',
                 'learning_time' => 25,
                 'sessions_purchased' => 10,
+                'is_regular' => 1,
                 'schedule' => [now()->dayOfWeekIso => '09:00'],
             ]);
 
@@ -506,6 +507,7 @@ class InstructorPagesTest extends TestCase
                 'teaching_method' => 'audio',
                 'learning_time' => 15,
                 'sessions_purchased' => 10,
+                'is_regular' => 1,
                 'schedule' => [1 => '18:30'],
             ])
             ->assertSessionHasNoErrors();
