@@ -242,7 +242,10 @@
                       scored.forEach(([k, v]) => out.push(`- ${@js(SessionReport::SCORE_FIELDS)[k]}: ${v}/{{ SessionReport::SCORE_MAX }}`));
                   }
 
-                  if (this.comments) out.push('', this.comments);
+                  {{-- Headed like every other section, and like legacy wrote it.
+                       Pushed as one entry so the line breaks the instructor typed
+                       survive the join. --}}
+                  if (this.comments) out.push('', `Teacher's Comments`, this.comments);
 
                   navigator.clipboard.writeText(out.join('\n'))
                       .then(() => window.notify('success', 'Report copied to clipboard.'))
