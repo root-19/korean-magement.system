@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\SessionStatus;
 use App\Models\AttendanceRequest;
 use App\Models\ClassSession;
 use App\Models\User;
@@ -66,14 +67,25 @@ final class DayRoster
                 ->orWhere('rescheduled_date', $dateString))
             ->get();
 
+        $onThisDate = $sessions->filter(
+            fn (ClassSession $session) => $session->scheduled_date->toDateString() === $dateString
+                || $session->paid_date?->toDateString() === $dateString
+        );
+
         // A postponed class in the current shape points at the day it comes back
         // on while the row itself stays on the original date. On that later day
         // it is the *reason* for a class, not the class: marking it would edit
         // the postponement rather than record the makeup. So it is held apart and
         // only its label is taken — the row the instructor marks is the one
         // sitting on this date, which may not exist yet.
-        [$pointers, $onThisDate] = $sessions->partition(
-            fn (ClassSession $session) => $session->rescheduled_date?->toDateString() === $dateString
+        //
+        // The pointer counts only while the row is still postponed. A slot that
+        // was re-marked or cleared was taught, or is owed, on its own date, and a
+        // pointer left behind by it would keep conjuring a makeup on a day the
+        // student is not coming.
+        $pointers = $sessions->filter(
+            fn (ClassSession $session) => $session->status === SessionStatus::Postponed
+                && $session->rescheduled_date?->toDateString() === $dateString
                 && $session->scheduled_date->toDateString() !== $dateString
         );
 
@@ -97,7 +109,11 @@ final class DayRoster
             $rows->put($session->student_id, [
                 'student' => $existing['student'] ?? $session->student,
                 'profile' => $existing['profile'] ?? $session->student?->studentProfile,
-                'time' => $existing['time'] ?? $session->rescheduled_time ?? $session->makeup_time,
+                // The agreed hour wins over the student's usual slot: a makeup
+                // that lands on a weekday they already attend was still moved to
+                // a time both sides settled on, and showing the timetable time
+                // sends the instructor to the wrong hour.
+                'time' => $session->rescheduled_time ?: $session->makeup_time ?: ($existing['time'] ?? null),
                 'session' => $existing['session'] ?? null,
                 'makeup_for' => $session->scheduled_date,
                 'is_extra' => $existing === null,

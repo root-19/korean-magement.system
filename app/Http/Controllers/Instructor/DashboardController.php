@@ -88,9 +88,10 @@ class DashboardController extends Controller
      * A month of day cells with per-day session counts, for the calendar.
      *
      * Past and present days are counted from class_sessions — what actually
-     * happened. Future days have no session rows yet, so their count is
-     * projected from the weekly timetable; without that, next month's calendar
-     * would be blank and there would be nothing to click.
+     * happened — plus any makeup that has landed on them but has no row yet.
+     * Future days have no session rows at all, so their count is projected from
+     * the weekly timetable; without that, next month's calendar would be blank
+     * and there would be nothing to click.
      *
      * @return array<int, array<string, mixed>>
      */
@@ -99,13 +100,15 @@ class DashboardController extends Controller
         $start = $month->startOfMonth();
         $end = $month->endOfMonth();
 
-        $counts = ClassSession::query()
-            ->selectRaw('paid_date, COUNT(*) as total, SUM(status IS NULL) as unmarked')
+        // Rows rather than aggregates: a makeup landing on a day is only extra
+        // work if that student has no row there already, and that cannot be
+        // decided from a COUNT.
+        $recorded = ClassSession::query()
+            ->select('paid_date', 'student_id', 'status')
             ->where('instructor_id', $instructorId)
             ->whereBetween('paid_date', [$start->toDateString(), $end->toDateString()])
-            ->groupBy('paid_date')
             ->get()
-            ->keyBy(fn ($row) => (string) $row->paid_date->toDateString());
+            ->groupBy(fn ($row) => (string) $row->paid_date->toDateString());
 
         $timetabled = $this->timetabledStudentsByWeekday($instructorId);
         $makeups = $this->makeupStudentsByDate($instructorId, $start, $end);
@@ -120,22 +123,33 @@ class DashboardController extends Controller
 
         for ($day = $start; $day->lte($end); $day = $day->addDay()) {
             $dateString = $day->toDateString();
-            $row = $counts->get($dateString);
+            $rows = $recorded->get($dateString, collect());
+
+            // A makeup keeps its row on the date it was postponed FROM, so the
+            // day it lands on holds nothing until the class is marked. Counting
+            // only rows left the calendar blank on exactly the day the student
+            // comes back — the day the instructor most needs to see.
+            $pending = array_diff(
+                $makeups[$dateString] ?? [],
+                $rows->pluck('student_id')->map(fn ($id) => (int) $id)->all(),
+            );
+
+            $isUpcoming = $day->gt($today);
 
             // Union of student ids, not a sum: rosterFor keys by student, so a
             // student with both a regular slot and a makeup on one day is one
             // row there and must be one class here.
-            $expected = $day->gt($today)
-                ? array_unique(array_merge(
-                    $timetabled[$day->dayOfWeekIso] ?? [],
-                    $makeups[$dateString] ?? [],
-                ))
+            $expected = $isUpcoming
+                ? array_unique(array_merge($timetabled[$day->dayOfWeekIso] ?? [], $pending))
                 : [];
 
             $cells[] = [
                 'date' => $day,
-                'total' => (int) ($row->total ?? 0),
-                'unmarked' => (int) ($row->unmarked ?? 0),
+                // Once the day arrives an unmarked makeup is work owed, not a
+                // projection, so it joins the recorded rows and shows as needing
+                // marking rather than as a faint upcoming dot.
+                'total' => $rows->count() + ($isUpcoming ? 0 : count($pending)),
+                'unmarked' => $rows->whereNull('status')->count() + ($isUpcoming ? 0 : count($pending)),
                 'upcoming' => count($expected),
             ];
         }
@@ -187,6 +201,10 @@ class DashboardController extends Controller
         return ClassSession::query()
             ->select('rescheduled_date', 'student_id')
             ->where('instructor_id', $instructorId)
+            // Only while the class is still postponed, matching DayRoster: a
+            // slot that was re-marked or cleared is owed on its own date, and
+            // rows written before that was enforced still carry a stale pointer.
+            ->status(SessionStatus::Postponed)
             ->whereNotNull('rescheduled_date')
             ->whereBetween('rescheduled_date', [$start->toDateString(), $end->toDateString()])
             ->get()

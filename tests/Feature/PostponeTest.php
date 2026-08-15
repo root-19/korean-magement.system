@@ -71,6 +71,32 @@ class PostponeTest extends TestCase
         parent::tearDown();
     }
 
+    /**
+     * Both clocks, for the same reason setUp sets both.
+     */
+    private function moveClockTo(string $date): void
+    {
+        CarbonImmutable::setTestNow($date.' 09:00:00');
+        Carbon::setTestNow($date.' 09:00:00');
+    }
+
+    /**
+     * Postpone the Friday class through the endpoint the instructor uses.
+     *
+     * @param  array<string, mixed>  $overrides
+     */
+    private function postponeFriday(array $overrides = []): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.classes.attendance'), array_merge([
+                'student_id' => $this->student->id,
+                'date' => $this->friday,
+                'status' => 'postponed',
+                'party' => 'student',
+            ], $overrides))
+            ->assertSessionHasNoErrors();
+    }
+
     // ------------------------------------------------------- the makeup date rule
 
     #[Test]
@@ -294,6 +320,62 @@ class PostponeTest extends TestCase
     }
 
     #[Test]
+    public function a_makeup_shows_the_agreed_time_not_the_students_usual_slot(): void
+    {
+        // Tuesday is a day this student already attends, at 18:30. The makeup was
+        // moved to 3 PM, and the roster showed the timetable time instead — so
+        // the one row that says when to teach named the wrong hour.
+        $this->postponeFriday([
+            'reschedule' => 'manual',
+            'rescheduled_date' => '2026-08-11',
+            'rescheduled_time' => '15:00',
+        ]);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index', ['date' => '2026-08-11']))
+            ->assertOk()
+            ->assertSee('Makeup for Aug 7')
+            ->assertSee('3:00 PM');
+    }
+
+    #[Test]
+    public function the_calendar_counts_a_makeup_on_the_day_it_lands(): void
+    {
+        // Saturday is off this student's timetable, so nothing but the makeup
+        // puts a class there — and the makeup's row stays on Friday. Counting
+        // rows alone, the calendar went blank on the day it arrived: the class
+        // showed as upcoming right up to the day it was due, then vanished.
+        $this->postponeFriday([
+            'reschedule' => 'manual',
+            'rescheduled_date' => '2026-08-08',
+        ]);
+
+        $this->moveClockTo('2026-08-08');
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertSee('Saturday, August 8 — 1 class');
+    }
+
+    #[Test]
+    public function a_makeup_that_passed_unmarked_stays_on_the_calendar(): void
+    {
+        // Two days later it is still owed: it was never taught and never paid.
+        $this->postponeFriday([
+            'reschedule' => 'manual',
+            'rescheduled_date' => '2026-08-08',
+        ]);
+
+        $this->moveClockTo('2026-08-10');
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertSee('Saturday, August 8 — 1 class');
+    }
+
+    #[Test]
     public function a_makeup_on_an_off_timetable_day_still_marks_the_calendar(): void
     {
         // Saturday is not in this student's Monday-to-Friday timetable, so only
@@ -313,6 +395,52 @@ class PostponeTest extends TestCase
             ->assertOk()
             // The calendar's day title carries the count for that date.
             ->assertSee('Saturday, August 15 — 1 class');
+    }
+
+    // ------------------------------------------------- when it is called off
+
+    #[Test]
+    public function marking_the_slot_afterwards_takes_the_makeup_off_the_later_day(): void
+    {
+        // The student turned up after all, so the postponement never happened —
+        // and the class it promised on a later day has to go with it. The
+        // pointer was left behind, so the makeup date kept listing a class
+        // nobody was coming to, and the calendar kept counting it.
+        $this->postponeFriday();
+
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.classes.attendance'), [
+                'student_id' => $this->student->id,
+                'date' => $this->friday,
+                'status' => 'present',
+            ])
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(ClassSession::firstOrFail()->rescheduled_date);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index', ['date' => '2026-08-11']))
+            ->assertOk()
+            ->assertDontSee('Makeup for Aug 7');
+    }
+
+    #[Test]
+    public function clearing_the_postponement_takes_the_makeup_with_it(): void
+    {
+        // Otherwise the makeup is stranded: its own date shows a class, and the
+        // row that would clear it is no longer marked as anything.
+        $this->postponeFriday();
+
+        $this->actingAs($this->instructor)
+            ->delete(route('instructor.classes.destroy', ClassSession::firstOrFail()))
+            ->assertSessionHasNoErrors();
+
+        $this->assertNull(ClassSession::firstOrFail()->rescheduled_date);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index', ['date' => '2026-08-11']))
+            ->assertOk()
+            ->assertDontSee('Makeup for Aug 7');
     }
 
     // ------------------------------------------------------- the absence side

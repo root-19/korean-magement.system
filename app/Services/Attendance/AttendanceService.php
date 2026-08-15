@@ -73,6 +73,12 @@ class AttendanceService
                 // so the marker has to survive a null. Legacy was careful about
                 // this too; see the comment in ClassModel::adjustStudentMetrics.
                 'postpone_reason' => $reason ?? ($session->makeupOrigin() ? $session->postpone_reason : null),
+                // Marking the slot present or absent settles it on its own date,
+                // so it is no longer coming back later and the makeup pointer
+                // goes with the postponement. Left behind, it keeps putting the
+                // student on a roster for a class that has already happened.
+                'rescheduled_date' => $status === SessionStatus::Postponed ? $session->rescheduled_date : null,
+                'rescheduled_time' => $status === SessionStatus::Postponed ? $session->rescheduled_time : null,
                 'marked_by' => $instructor->id,
                 'marked_at' => now(),
             ]);
@@ -156,6 +162,9 @@ class AttendanceService
                 'status' => SessionStatus::Present,
                 'absent_by' => null,
                 'postponed_by' => null,
+                // Taught, so whatever postponement occupied this slot is over.
+                'rescheduled_date' => null,
+                'rescheduled_time' => null,
                 'marked_by' => $instructor->id,
                 'marked_at' => now(),
             ]);
@@ -246,6 +255,12 @@ class AttendanceService
                 'absent_by' => null,
                 'postponed_by' => null,
                 'held_date' => null,
+                // An unmarked slot is not a postponed one, so the makeup it was
+                // pointing at is no longer scheduled. Keeping the pointer would
+                // strand a class on the makeup date with nothing left to clear
+                // it from there.
+                'rescheduled_date' => null,
+                'rescheduled_time' => null,
                 'marked_by' => $instructor->id,
                 'marked_at' => now(),
             ])->save();
