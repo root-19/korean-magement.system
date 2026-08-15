@@ -66,6 +66,14 @@ class StudentSchedule extends Model
             : '—';
     }
 
+    /** "18:30:00" stored, "18:30" for an <input type="time"> value. */
+    public function inputTime(): string
+    {
+        return $this->start_time
+            ? date('H:i', strtotime((string) $this->start_time))
+            : '';
+    }
+
     /**
      * Map an English day name to its ISO number. Used by the legacy importer to
      * unpack the comma-joined `users.schedule` string.

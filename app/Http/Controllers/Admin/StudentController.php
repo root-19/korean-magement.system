@@ -6,11 +6,17 @@ use App\Enums\EnrollmentStatus;
 use App\Enums\Party;
 use App\Enums\Role;
 use App\Enums\SessionStatus;
+use App\Enums\TeachingMethod;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\StoreStudentRequest;
+use App\Http\Requests\Admin\UpdateStudentRequest;
 use App\Models\AuditLog;
 use App\Models\ClassSession;
 use App\Models\StudentProfile;
+use App\Models\StudentSchedule;
 use App\Models\User;
+use App\Services\Enrollment\StudentEnroller;
+use App\Services\Enrollment\StudentUpdater;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -61,6 +67,41 @@ class StudentController extends Controller
         ]);
     }
 
+    /**
+     * The enrol form. The instructor equivalent is instructor/students/create.
+     */
+    public function create(): View
+    {
+        return view('admin.students.create', $this->formOptions());
+    }
+
+    /**
+     * Enrol a student from the admin area.
+     *
+     * StudentEnroller approves an admin's enrolment outright — there is nobody
+     * left to approve it — so the student is teachable and billable on save.
+     */
+    public function store(StoreStudentRequest $request, StudentEnroller $enroller): RedirectResponse
+    {
+        $data = $request->studentData();
+
+        $result = $enroller->enrol(
+            actor: $request->user(),
+            data: $data,
+            instructor: ($data['instructor_id'] ?? null)
+                ? User::query()->instructors()->find($data['instructor_id'])
+                : null,
+        );
+
+        return redirect()
+            ->route('admin.students.show', $result['student'])
+            ->with('success', sprintf(
+                '%s enrolled and approved. Temporary password: %s',
+                $result['student']->name,
+                $result['password'],
+            ));
+    }
+
     public function show(User $student): View
     {
         abort_unless($student->role === Role::Student, 404);
@@ -90,21 +131,58 @@ class StudentController extends Controller
     }
 
     /**
+     * The edit form: every detail of one student on one page.
+     */
+    public function edit(User $student): View
+    {
+        abort_unless($student->role === Role::Student, 404);
+
+        $profile = $this->profileFor($student);
+
+        // preventLazyLoading would turn reading the timetable into an error
+        // locally, and the counters card needs the same figures as the profile.
+        $student->loadMissing('schedules');
+
+        return view('admin.students.edit', $this->formOptions() + [
+            'student' => $student,
+            'profile' => $profile,
+            'stats' => $this->stats($student->id, $profile),
+            'statuses' => $this->statusOptions($profile),
+            'schedule' => $student->schedules
+                ->mapWithKeys(fn (StudentSchedule $slot) => [$slot->day_of_week => $slot->inputTime()])
+                ->all(),
+        ]);
+    }
+
+    public function update(UpdateStudentRequest $request, User $student, StudentUpdater $updater): RedirectResponse
+    {
+        abort_unless($student->role === Role::Student, 404);
+
+        $updater->update(
+            admin: $request->user(),
+            student: $student,
+            profile: $this->profileFor($student),
+            data: $request->studentData(),
+        );
+
+        return redirect()
+            ->route('admin.students.show', $student)
+            ->with('success', "{$student->name} updated.");
+    }
+
+    /**
      * Reassign a student to a different instructor.
      *
      * Past sessions keep the instructor who taught them — class_sessions carries
      * its own instructor_id — so reassigning never moves historical earnings.
      */
-    public function reassign(Request $request, User $student): RedirectResponse
+    public function reassign(Request $request, User $student, StudentUpdater $updater): RedirectResponse
     {
         abort_unless($student->role === Role::Student, 404);
 
         $data = $request->validate([
             'instructor_id' => ['nullable', 'integer', 'exists:users,id'],
         ]);
-
-        $profile = StudentProfile::where('user_id', $student->id)->firstOrFail();
-        $previous = $profile->instructor?->name;
 
         // Absent key, not just null: see the note in the instructor
         // ClassSessionController — validate() omits fields the request never sent.
@@ -114,15 +192,7 @@ class StudentController extends Controller
             ? User::query()->instructors()->findOrFail($instructorId)
             : null;
 
-        $profile->update(['instructor_id' => $instructor?->id]);
-
-        AuditLog::record(
-            action: 'student.reassigned',
-            subject: $student,
-            targetName: $student->name,
-            details: ['from' => $previous, 'to' => $instructor?->name],
-            userId: $request->user()->id,
-        );
+        $updater->reassign($request->user(), $student, $this->profileFor($student), $instructor);
 
         return back()->with(
             'success',
@@ -172,6 +242,50 @@ class StudentController extends Controller
     }
 
     // ---------------------------------------------------------------- internals
+
+    /**
+     * Every student has exactly one profile; the pages that edit one cannot
+     * work without it, so a missing row is a 404 rather than a blank form.
+     */
+    private function profileFor(User $student): StudentProfile
+    {
+        return StudentProfile::query()
+            ->with('instructor:id,name')
+            ->where('user_id', $student->id)
+            ->firstOrFail();
+    }
+
+    /**
+     * The pickers both the enrol and edit forms render.
+     *
+     * @return array<string, mixed>
+     */
+    private function formOptions(): array
+    {
+        return [
+            'days' => StudentSchedule::DAYS,
+            'methods' => TeachingMethod::cases(),
+            'learningTimes' => config('academy.learning_times'),
+            'instructors' => User::query()->instructors()->active()->orderBy('name')->get(['id', 'name']),
+        ];
+    }
+
+    /**
+     * Statuses the edit form may offer.
+     *
+     * Approving or rejecting is a decision and nothing un-decides one, so
+     * "awaiting approval" is only listed while it still applies.
+     *
+     * @return array<int, EnrollmentStatus>
+     */
+    private function statusOptions(StudentProfile $profile): array
+    {
+        return array_values(array_filter(
+            EnrollmentStatus::cases(),
+            fn (EnrollmentStatus $status) => $status !== EnrollmentStatus::Pending
+                || $profile->enrollment_status === EnrollmentStatus::Pending,
+        ));
+    }
 
     /**
      * The four legacy pages, as filters on one query.

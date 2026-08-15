@@ -168,9 +168,21 @@ Route::middleware(['auth', 'role:admin'])
         // look at when auditing an instructor's past earnings. Without it these
         // routes 404 on exactly those students.
         Route::get('/students', [AdminStudents::class, 'index'])->name('students.index');
+
+        // `create` is declared before `{student}` so "create" is not swallowed
+        // as a route parameter.
+        Route::get('/students/create', [AdminStudents::class, 'create'])->name('students.create');
+        Route::post('/students', [AdminStudents::class, 'store'])->name('students.store');
+
         Route::get('/students/{student}', [AdminStudents::class, 'show'])
             ->withTrashed()
             ->name('students.show');
+        Route::get('/students/{student}/edit', [AdminStudents::class, 'edit'])
+            ->withTrashed()
+            ->name('students.edit');
+        Route::patch('/students/{student}', [AdminStudents::class, 'update'])
+            ->withTrashed()
+            ->name('students.update');
         Route::patch('/students/{student}/instructor', [AdminStudents::class, 'reassign'])
             ->withTrashed()
             ->name('students.reassign');

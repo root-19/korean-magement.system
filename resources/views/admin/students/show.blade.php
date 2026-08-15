@@ -9,6 +9,10 @@
         <x-icon name="chevron-left" class="h-4 w-4" />
         All students
     </a>
+    <a href="{{ route('admin.students.edit', $student) }}" class="btn-primary btn-sm">
+        <x-icon name="pencil" class="h-4 w-4" />
+        Edit details
+    </a>
 @endsection
 
 @section('content')

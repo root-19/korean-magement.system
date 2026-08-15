@@ -4,6 +4,13 @@
 @section('heading', 'Students')
 @section('subheading', $students->total().' '.Str::plural('student', $students->total()))
 
+@section('actions')
+    <a href="{{ route('admin.students.create') }}" class="btn-primary btn-sm">
+        <x-icon name="user-plus" class="h-4 w-4" />
+        Add student
+    </a>
+@endsection
+
 @section('content')
     {{-- The legacy student, user_table, free_students and re_enrolled pages,
          collapsed into filters on one list. --}}
@@ -74,6 +81,7 @@
                             <th>Schedule</th>
                             <th class="text-center">Left</th>
                             <th>Status</th>
+                            <th class="w-px"><span class="sr-only">Actions</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -137,6 +145,16 @@
                                         <span class="{{ $profile->enrollment_status->badgeClass() }}">
                                             {{ $profile->enrollment_status->label() }}
                                         </span>
+                                    @endif
+                                </td>
+
+                                <td class="text-right">
+                                    @if ($student)
+                                        <a href="{{ route('admin.students.edit', $student) }}"
+                                           class="btn-ghost btn-sm" aria-label="Edit {{ $student->name }}">
+                                            <x-icon name="pencil" class="h-4 w-4" />
+                                            Edit
+                                        </a>
                                     @endif
                                 </td>
                             </tr>
