@@ -156,7 +156,12 @@ Route::middleware(['auth', 'role:admin'])
         Route::get('/dashboard', AdminDashboard::class)->name('dashboard');
 
         // Instructors
+        //
+        // `create` is declared before `{instructor}` so "create" is not swallowed
+        // as a route parameter.
         Route::get('/instructors', [AdminInstructors::class, 'index'])->name('instructors.index');
+        Route::get('/instructors/create', [AdminInstructors::class, 'create'])->name('instructors.create');
+        Route::post('/instructors', [AdminInstructors::class, 'store'])->name('instructors.store');
         Route::get('/instructors/{instructor}', [AdminInstructors::class, 'show'])->name('instructors.show');
         Route::patch('/instructors/{instructor}/status', [AdminInstructors::class, 'toggleStatus'])
             ->name('instructors.status');

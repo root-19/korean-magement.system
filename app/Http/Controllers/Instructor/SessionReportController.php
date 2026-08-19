@@ -2,6 +2,8 @@
 
 namespace App\Http\Controllers\Instructor;
 
+use App\Enums\Party;
+use App\Enums\SessionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ClassSession;
 use App\Models\SessionReport;
@@ -186,12 +188,45 @@ class SessionReportController extends Controller
             // Where the student is in their plan — "5 of 15 taught, 10 left".
             // sessionsPurchased() owns the accounting identity (attended +
             // student-absent + remaining + deducted), so it is not restated here.
-            'progress' => [
+            'progress' => array_merge([
                 'attended' => (int) ($profile?->sessions_attended ?? 0),
                 'purchased' => (int) ($profile?->sessionsPurchased() ?? 0),
                 'remaining' => (int) ($profile?->sessions_remaining ?? 0),
-            ],
+            ], $this->attendanceCounts($instructorId, $student->id)),
         ]);
+    }
+
+    /**
+     * Absences and postponements for this student, split by who is
+     * responsible — the breakdown the Copy All text and the summary card
+     * both need, so it is asked for once and reused.
+     *
+     * @return array<string, int>
+     */
+    private function attendanceCounts(int $instructorId, int $studentId): array
+    {
+        $counts = ClassSession::query()
+            ->selectRaw('
+                SUM(status = ? AND absent_by = ?) as student_absent,
+                SUM(status = ? AND absent_by = ?) as teacher_absent,
+                SUM(status = ? AND postponed_by = ?) as student_postponed,
+                SUM(status = ? AND postponed_by = ?) as teacher_postponed
+            ', [
+                SessionStatus::Absent->value, Party::Student->value,
+                SessionStatus::Absent->value, Party::Teacher->value,
+                SessionStatus::Postponed->value, Party::Student->value,
+                SessionStatus::Postponed->value, Party::Teacher->value,
+            ])
+            ->where('instructor_id', $instructorId)
+            ->where('student_id', $studentId)
+            ->first();
+
+        return [
+            'student_absent' => (int) ($counts->student_absent ?? 0),
+            'teacher_absent' => (int) ($counts->teacher_absent ?? 0),
+            'student_postponed' => (int) ($counts->student_postponed ?? 0),
+            'teacher_postponed' => (int) ($counts->teacher_postponed ?? 0),
+        ];
     }
 
     /**

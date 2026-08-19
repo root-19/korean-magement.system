@@ -3,6 +3,8 @@
 namespace Tests\Feature;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\Party;
+use App\Models\ClassSession;
 use App\Models\SessionReport;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -260,10 +262,56 @@ class SessionReportFormTest extends TestCase
         // Serialised the same way the view does, rather than guessing at @js()'s
         // attribute escaping.
         $this->assertStringContainsString(
-            (string) Js::from(['attended' => 5, 'purchased' => 15, 'remaining' => 10]),
+            (string) Js::from([
+                'attended' => 5,
+                'purchased' => 15,
+                'remaining' => 10,
+                'student_absent' => 0,
+                'teacher_absent' => 0,
+                'student_postponed' => 0,
+                'teacher_postponed' => 0,
+            ]),
             $html,
         );
         $this->assertStringContainsString('this.progress.attended', $html);
+    }
+
+    #[Test]
+    public function absences_and_postponements_are_split_by_who_is_responsible(): void
+    {
+        StudentProfile::where('user_id', $this->student->id)->update([
+            'sessions_attended' => 5,
+            'sessions_remaining' => 10,
+            'sessions_deducted' => 0,
+        ]);
+
+        ClassSession::factory()->for($this->instructor, 'instructor')->for($this->student, 'student')
+            ->studentAbsent()->on('2026-07-01')->create();
+        ClassSession::factory()->for($this->instructor, 'instructor')->for($this->student, 'student')
+            ->teacherAbsent()->on('2026-07-02')->create();
+        ClassSession::factory()->for($this->instructor, 'instructor')->for($this->student, 'student')
+            ->postponed()->on('2026-07-03')->create();
+        ClassSession::factory()->for($this->instructor, 'instructor')->for($this->student, 'student')
+            ->postponed()->state(['postponed_by' => Party::Teacher])->on('2026-07-04')->create();
+
+        $html = $this->actingAs($this->instructor)
+            ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
+            ->assertOk()
+            ->getContent();
+
+        // purchased = attended(5) + student_absent(1) + remaining(10) + deducted(0)
+        $this->assertStringContainsString(
+            (string) Js::from([
+                'attended' => 5,
+                'purchased' => 16,
+                'remaining' => 10,
+                'student_absent' => 1,
+                'teacher_absent' => 1,
+                'student_postponed' => 1,
+                'teacher_postponed' => 1,
+            ]),
+            $html,
+        );
     }
 
     #[Test]

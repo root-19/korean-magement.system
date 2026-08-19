@@ -130,6 +130,26 @@
                 </div>
 
                 <div class="flex items-center gap-2">
+                    <dt class="text-gray-500">Absent</dt>
+                    <dd class="numeric font-medium text-white">
+                        {{ $progress['student_absent'] }}
+                        <span class="text-xs font-normal text-gray-400">student</span>
+                        · {{ $progress['teacher_absent'] }}
+                        <span class="text-xs font-normal text-gray-400">teacher</span>
+                    </dd>
+                </div>
+
+                <div class="flex items-center gap-2">
+                    <dt class="text-gray-500">Postponed</dt>
+                    <dd class="numeric font-medium text-white">
+                        {{ $progress['student_postponed'] }}
+                        <span class="text-xs font-normal text-gray-400">student</span>
+                        · {{ $progress['teacher_postponed'] }}
+                        <span class="text-xs font-normal text-gray-400">teacher</span>
+                    </dd>
+                </div>
+
+                <div class="flex items-center gap-2">
                     <dt class="text-gray-500">Session value</dt>
                     <dd class="numeric font-medium text-white">@money2($profile?->sessionValue() ?? 0)</dd>
                 </div>
@@ -222,6 +242,8 @@
 
                   {{-- Where the student is in their plan: 5/15 taught, 10 left. --}}
                   out.push(`Sessions: ${this.progress.attended}/${this.progress.purchased} attended · ${this.progress.remaining} remaining`);
+                  out.push(`Absent: ${this.progress.student_absent} student · ${this.progress.teacher_absent} teacher`);
+                  out.push(`Postponed: ${this.progress.student_postponed} student · ${this.progress.teacher_postponed} teacher`);
                   out.push('');
 
                   if (this.today) out.push(`Today's lesson: ${this.today}`);

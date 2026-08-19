@@ -4,6 +4,13 @@
 @section('heading', 'Instructors')
 @section('subheading', $instructors->total().' '.Str::plural('instructor', $instructors->total()))
 
+@section('actions')
+    <a href="{{ route('admin.instructors.create') }}" class="btn-primary btn-sm">
+        <x-icon name="user-plus" class="h-4 w-4" />
+        Add instructor
+    </a>
+@endsection
+
 @section('content')
     <div class="mb-4 flex flex-wrap items-center gap-3">
         <form method="GET" class="relative flex-1 sm:max-w-xs">
@@ -36,6 +43,8 @@
                            message="Instructors are created by an administrator.">
                 @if ($search !== '')
                     <a href="{{ route('admin.instructors.index') }}" class="btn-secondary btn-sm">Clear search</a>
+                @else
+                    <a href="{{ route('admin.instructors.create') }}" class="btn-primary btn-sm">Add instructor</a>
                 @endif
             </x-empty-state>
         @else
