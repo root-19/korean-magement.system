@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Enums\EnrollmentStatus;
 use App\Enums\Party;
+use App\Enums\TeachingMethod;
 use App\Models\ClassSession;
 use App\Models\SessionReport;
 use App\Models\StudentProfile;
+use App\Models\StudentSchedule;
 use App\Models\User;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
@@ -357,5 +359,66 @@ class SessionReportFormTest extends TestCase
             ->assertSee("Teacher's Comments", false)
             ->assertSee('Copy All')
             ->assertSee('Save Feedback');
+    }
+
+    #[Test]
+    public function the_copied_report_is_headed_by_the_enrolment_details(): void
+    {
+        // Who the report is for and the shape of their classes — the student
+        // reads the pasted text without any of this on screen.
+        StudentProfile::where('user_id', $this->student->id)->update([
+            'start_date' => '2026-03-02',
+            'learning_time' => 25,
+            'teaching_method' => TeachingMethod::VideoAdults,
+        ]);
+
+        StudentSchedule::create(['student_id' => $this->student->id, 'day_of_week' => 3, 'start_time' => '18:30:00']);
+        StudentSchedule::create(['student_id' => $this->student->id, 'day_of_week' => 1, 'start_time' => '18:30:00']);
+
+        $html = $this->actingAs($this->instructor)
+            ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
+            ->assertOk()
+            ->getContent();
+
+        // Serialised the way the view hands it to Alpine, rather than guessing at
+        // @js()'s attribute escaping. Ordered by weekday, not by insertion.
+        $this->assertStringContainsString(
+            (string) Js::from([
+                'Student: A194 Report Student',
+                'Start date: March 2, 2026',
+                'Class day: Monday, Wednesday',
+                'Class duration: 25 minutes',
+                'Type of class: Video (Adults)',
+                'Class date: Monday, August 3, 2026',
+            ]),
+            $html,
+        );
+    }
+
+    #[Test]
+    public function an_unrecorded_enrolment_detail_is_left_out_of_the_copied_header(): void
+    {
+        // Rather than pasting "Class day: —" at the student. No timetable rows
+        // exist here, and the two nullable profile columns are cleared.
+        StudentProfile::where('user_id', $this->student->id)->update([
+            'start_date' => null,
+            'learning_time' => 25,
+            'teaching_method' => TeachingMethod::Audio,
+        ]);
+
+        $html = $this->actingAs($this->instructor)
+            ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
+            ->assertOk()
+            ->getContent();
+
+        $this->assertStringContainsString(
+            (string) Js::from([
+                'Student: A194 Report Student',
+                'Class duration: 25 minutes',
+                'Type of class: Audio',
+                'Class date: Monday, August 3, 2026',
+            ]),
+            $html,
+        );
     }
 }

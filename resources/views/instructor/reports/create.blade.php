@@ -100,6 +100,27 @@
     foreach (array_keys(SessionReport::SCORE_FIELDS) as $field) {
         $initialScores[$field] = (string) (old($field, $report?->{$field}) ?? '');
     }
+
+    /*
+     * The enrolment facts that head the copied report: who it is for, when they
+     * started, and the shape of their classes. None of them are editable on this
+     * form, so they are laid out once here instead of being tracked in Alpine.
+     * A fact that was never recorded is left out rather than pasted as a dash.
+     */
+    $copyHeader = [];
+
+    foreach ([
+        'Student' => $student->name,
+        'Start date' => $profile?->start_date?->format('F j, Y'),
+        'Class day' => $student->schedules->map->dayName()->implode(', '),
+        'Class duration' => $profile?->learning_time ? $profile->learning_time.' minutes' : null,
+        'Type of class' => $profile?->teaching_method?->label(),
+        'Class date' => \Carbon\Carbon::parse($date)->format('l, F j, Y'),
+    ] as $label => $value) {
+        if ((string) $value !== '') {
+            $copyHeader[] = $label.': '.$value;
+        }
+    }
 @endphp
 
 @section('content')
@@ -238,7 +259,7 @@
               {{-- Legacy's Copy All: the report as plain text, for pasting into a
                    chat with the student. --}}
               copyAll() {
-                  const out = [@js($student->name).concat(' · ', @js(\Carbon\Carbon::parse($date)->format('F j, Y'))), ''];
+                  const out = [...@js($copyHeader), ''];
 
                   {{-- Where the student is in their plan: 5/15 taught, 10 left. --}}
                   out.push(`Sessions: ${this.progress.attended}/${this.progress.purchased} attended · ${this.progress.remaining} remaining`);

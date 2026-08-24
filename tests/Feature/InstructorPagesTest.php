@@ -496,6 +496,10 @@ class InstructorPagesTest extends TestCase
         // The short durations the shortest lessons are booked at.
         $this->assertContains(10, config('academy.learning_times'));
         $this->assertContains(15, config('academy.learning_times'));
+
+        // …and the two long slots either side of the 45.
+        $this->assertContains(40, config('academy.learning_times'));
+        $this->assertContains(50, config('academy.learning_times'));
     }
 
     #[Test]
@@ -520,6 +524,58 @@ class InstructorPagesTest extends TestCase
         // A quarter of an hour bills a quarter of the method's hourly rate.
         $rate = config('academy.rates.audio');
         $this->assertEqualsWithDelta($rate / 4, $profile->sessionValue(), 0.01);
+    }
+
+    #[Test]
+    public function a_forty_minute_lesson_can_be_enrolled_and_prices_pro_rata(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.students.store'), [
+                'name' => 'A998 Forty Minutes',
+                'teaching_method' => 'audio',
+                'learning_time' => 40,
+                'sessions_purchased' => 10,
+                'is_regular' => 1,
+                'schedule' => [1 => '18:30'],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $profile = StudentProfile::where(
+            'user_id',
+            User::where('name', 'A998 Forty Minutes')->firstOrFail()->id,
+        )->firstOrFail();
+
+        $this->assertSame(40, $profile->learning_time);
+
+        // Two thirds of an hour bills two thirds of the method's hourly rate.
+        $rate = config('academy.rates.audio');
+        $this->assertEqualsWithDelta($rate * 40 / 60, $profile->sessionValue(), 0.01);
+    }
+
+    #[Test]
+    public function a_fifty_minute_lesson_can_be_enrolled_and_prices_pro_rata(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.students.store'), [
+                'name' => 'A999 Fifty Minutes',
+                'teaching_method' => 'audio',
+                'learning_time' => 50,
+                'sessions_purchased' => 10,
+                'is_regular' => 1,
+                'schedule' => [1 => '18:30'],
+            ])
+            ->assertSessionHasNoErrors();
+
+        $profile = StudentProfile::where(
+            'user_id',
+            User::where('name', 'A999 Fifty Minutes')->firstOrFail()->id,
+        )->firstOrFail();
+
+        $this->assertSame(50, $profile->learning_time);
+
+        // Five sixths of an hour bills five sixths of the method's hourly rate.
+        $rate = config('academy.rates.audio');
+        $this->assertEqualsWithDelta($rate * 50 / 60, $profile->sessionValue(), 0.01);
     }
 
     #[Test]

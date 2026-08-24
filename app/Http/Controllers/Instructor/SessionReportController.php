@@ -85,7 +85,7 @@ class SessionReportController extends Controller
 
         $student = User::query()
             ->withTrashed()
-            ->with('studentProfile')
+            ->with(['studentProfile', 'schedules'])
             ->findOrFail($report->student_id);
 
         return $this->form(
@@ -344,7 +344,7 @@ class SessionReportController extends Controller
     private function authorizedStudent(User $instructor, int $studentId): User
     {
         $student = User::query()
-            ->with('studentProfile')
+            ->with(['studentProfile', 'schedules'])
             ->whereKey($studentId)
             ->whereHas('studentProfile', fn ($q) => $q->where('instructor_id', $instructor->id))
             ->first();
