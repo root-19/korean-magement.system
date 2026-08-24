@@ -26,6 +26,20 @@
 @endsection
 
 @section('content')
+    @php
+        // A day that has not happened yet has nothing to mark: attendance is
+        // recorded on the day, and teaching a later slot early goes through the
+        // early-class flow, which credits the right date. Same rule as _roster,
+        // which the dashboard renders its day panels through — without it every
+        // row on a future date offered "For evaluation", the control for
+        // reopening a class that has already passed.
+        $isUpcoming = $date->startOfDay()->isFuture();
+
+        // Rows are classes, and one student can hold two of them when a makeup
+        // lands beside their regular class, so the heading counts the people.
+        $studentCount = $roster->unique(fn (array $row) => $row['student']->id)->count();
+    @endphp
+
     @if (! $date->isToday())
         <div class="mb-4 flex items-center justify-between gap-3 rounded-lg border border-brand-500/30 bg-brand-500/10 px-4 py-2.5 text-sm text-brand-400">
             <span>Showing {{ $date->isFuture() ? 'a future' : 'a past' }} date.</span>
@@ -37,7 +51,7 @@
 
     <x-card flush>
         <x-slot:title>
-            {{ $roster->count() }} {{ Str::plural('student', $roster->count()) }} scheduled
+            {{ $studentCount }} {{ Str::plural('student', $studentCount) }} scheduled
         </x-slot:title>
 
         <x-slot:subtitle>
@@ -148,6 +162,17 @@
                                      without JavaScript; Alpine only handles the
                                      absent-party prompt. --}}
                                 <td>
+                                    @if ($isUpcoming)
+                                        {{-- A row can already carry a session here — a makeup
+                                             moved onto this date — so show what it says. --}}
+                                        @if ($session?->status)
+                                            <span class="flex flex-wrap items-center gap-1.5">
+                                                @include('instructor._session-status', ['session' => $session])
+                                            </span>
+                                        @else
+                                            <span class="badge-neutral">Scheduled</span>
+                                        @endif
+                                    @else
                                     <div x-data="{ asking: false }" class="min-w-[13rem]">
                                         <div x-show="!asking" class="flex flex-wrap items-center gap-1.5">
                                             @if ($session?->status)
@@ -266,6 +291,7 @@
                                             </p>
                                         </div>
                                     </div>
+                                    @endif
                                 </td>
 
                                 <td>

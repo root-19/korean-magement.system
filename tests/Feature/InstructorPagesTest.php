@@ -399,6 +399,20 @@ class InstructorPagesTest extends TestCase
     }
 
     #[Test]
+    public function the_class_list_calls_a_future_date_scheduled_rather_than_offering_evaluation(): void
+    {
+        // "For evaluation" asks an admin to reopen a class that has already
+        // passed. A day that has not happened yet has nothing to reopen, and the
+        // page was putting that button on every row of it — the dashboard's own
+        // day panels have always said "Scheduled" here.
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index', ['date' => now()->addWeek()->toDateString()]))
+            ->assertOk()
+            ->assertSee('Scheduled')
+            ->assertDontSee('For evaluation');
+    }
+
+    #[Test]
     public function the_class_list_drops_a_student_with_no_sessions_left(): void
     {
         // Same rule as the dashboard — DayRoster hides them for both pages, so

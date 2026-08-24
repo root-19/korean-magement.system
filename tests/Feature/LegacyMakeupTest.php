@@ -262,4 +262,48 @@ class LegacyMakeupTest extends TestCase
             ClassSession::where('scheduled_date', $this->originalDate)->firstOrFail()->status,
         );
     }
+
+    // ------------------------------------------------ and where it stops showing
+
+    #[Test]
+    public function a_legacy_makeup_takes_the_last_session_off_the_slots_before_it(): void
+    {
+        // The makeup is a class the student has already agreed to come back for,
+        // so one of their prepaid sessions is spoken for. In this shape that
+        // promise is an unmarked row on the makeup date, which the weekly
+        // timetable knows nothing about — so every Tuesday in between was listed
+        // as a class to teach, on the strength of a session already committed.
+        StudentProfile::firstOrFail()->update(['sessions_remaining' => 1]);
+
+        ClassSession::factory()->postponed()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $this->student->id,
+            'scheduled_date' => $this->originalDate,
+            'postpone_reason' => 'NOT FEELING WELL',
+        ]);
+
+        // Further out than the pair in importLegacyMakeup, so the student has
+        // timetabled Tuesdays before the makeup rather than after it.
+        ClassSession::factory()
+            ->makeupFor($this->originalDate)
+            ->create([
+                'instructor_id' => $this->instructor->id,
+                'student_id' => $this->student->id,
+                'scheduled_date' => '2026-08-20',
+            ]);
+
+        CarbonImmutable::setTestNow('2026-08-11 09:00:00');
+        Carbon::setTestNow('2026-08-11 09:00:00');
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index', ['date' => '2026-08-11']))
+            ->assertOk()
+            ->assertSee('0 students scheduled');
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index', ['date' => '2026-08-20']))
+            ->assertOk()
+            ->assertSee('A443 Makeup Kid')
+            ->assertSee('Makeup for Aug 4');
+    }
 }

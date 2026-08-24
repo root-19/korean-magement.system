@@ -112,6 +112,7 @@ class DashboardController extends Controller
 
         $timetabled = $this->timetabledStudentsByWeekday($instructorId);
         $makeups = $this->makeupStudentsByDate($instructorId, $start, $end);
+        $balances = StudentProfile::forInstructor($instructorId)->pluck('sessions_remaining', 'user_id');
         $today = CarbonImmutable::today();
 
         $cells = [];
@@ -129,18 +130,18 @@ class DashboardController extends Controller
             // day it lands on holds nothing until the class is marked. Counting
             // only rows left the calendar blank on exactly the day the student
             // comes back — the day the instructor most needs to see.
-            $pending = array_diff(
+            $pending = $this->countableMakeups(
                 $makeups[$dateString] ?? [],
                 $rows->pluck('student_id')->map(fn ($id) => (int) $id)->all(),
+                $balances,
             );
 
             $isUpcoming = $day->gt($today);
 
-            // Union of student ids, not a sum: rosterFor keys by student, so a
-            // student with both a regular slot and a makeup on one day is one
-            // row there and must be one class here.
+            $slots = $timetabled[$day->dayOfWeekIso] ?? [];
+
             $expected = $isUpcoming
-                ? array_unique(array_merge($timetabled[$day->dayOfWeekIso] ?? [], $pending))
+                ? array_merge($slots, $this->countableMakeups($makeups[$dateString] ?? [], $slots, $balances))
                 : [];
 
             $cells[] = [
@@ -158,19 +159,50 @@ class DashboardController extends Controller
     }
 
     /**
+     * The makeups on a date that count as a class of their own.
+     *
+     * A makeup landing on a day the student already has a class on is a second
+     * class only while their balance covers both — DayRoster lists the day by the
+     * same rule, so the count on a cell and the roster it opens agree. Below that
+     * the makeup IS the day's class and was already counted with it.
+     *
+     * @param  array<int, int>  $makeups  Students with a makeup on the date
+     * @param  array<int, int>  $alreadyOnTheDay  Students with a class there already
+     * @param  Collection<int, int>  $balances  sessions_remaining, keyed by student
+     * @return array<int, int>
+     */
+    private function countableMakeups(array $makeups, array $alreadyOnTheDay, Collection $balances): array
+    {
+        return array_values(array_filter(
+            $makeups,
+            fn (int $studentId) => ! in_array($studentId, $alreadyOnTheDay, true)
+                || DayRoster::makeupNeedsOwnRow((int) $balances->get($studentId, 0), 1),
+        ));
+    }
+
+    /**
      * Which students are timetabled on each ISO weekday.
      *
-     * Same population as group 1 of rosterFor. Ids rather than a count, so days
-     * can be merged with the makeups below without double-counting a student.
+     * Same population as group 1 of rosterFor. Ids rather than a count, so a
+     * makeup landing on a slot day can be told apart from the slot itself.
      *
      * @return array<int, array<int, int>>
      */
     private function timetabledStudentsByWeekday(int $instructorId): array
     {
+        // Follows DayRoster::withoutFullyBookedStudents: a session already
+        // promised to a makeup is not free to be taught on a timetable slot, so
+        // a student whose whole balance is spoken for projects no classes.
+        $owed = ClassSession::query()
+            ->where('instructor_id', $instructorId)
+            ->makeupOwedAfter(CarbonImmutable::today()->toDateString())
+            ->pluck('student_id')
+            ->countBy(fn ($id) => (int) $id);
+
         return DB::table('student_schedules as ss')
             ->join('student_profiles as sp', 'sp.user_id', '=', 'ss.student_id')
             ->join('users', 'users.id', '=', 'ss.student_id')
-            ->select('ss.day_of_week as day', 'ss.student_id')
+            ->select('ss.day_of_week as day', 'ss.student_id', 'sp.sessions_remaining')
             ->where('sp.instructor_id', $instructorId)
             ->where('sp.enrollment_status', EnrollmentStatus::Approved->value)
             ->where('users.is_active', true)
@@ -180,6 +212,11 @@ class DashboardController extends Controller
             ->where('sp.sessions_remaining', '>', 0)
             ->distinct()
             ->get()
+            ->reject(function ($row) use ($owed) {
+                $promised = (int) $owed->get((int) $row->student_id, 0);
+
+                return $promised > 0 && (int) $row->sessions_remaining <= $promised;
+            })
             ->groupBy('day')
             ->map(fn ($rows) => $rows->pluck('student_id')->map(fn ($id) => (int) $id)->all())
             ->mapWithKeys(fn ($ids, $day) => [(int) $day => $ids])

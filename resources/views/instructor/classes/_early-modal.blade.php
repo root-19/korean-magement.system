@@ -45,7 +45,10 @@
                         <label for="early-student" class="form-label">Student</label>
                         <select id="early-student" name="student_id" required class="form-select">
                             <option value="">Choose a student…</option>
-                            @foreach ($roster as $row)
+                            {{-- One option per student: a day can list the same
+                                 student twice when a makeup lands beside their
+                                 regular class. --}}
+                            @foreach ($roster->unique(fn (array $row) => $row['student']->id) as $row)
                                 <option value="{{ $row['student']->id }}">
                                     {{ $row['student']->name }}
                                     ({{ $row['profile']?->sessions_remaining ?? 0 }} left)

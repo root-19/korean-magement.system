@@ -132,6 +132,31 @@ class ClassSession extends Model
         return $query->whereNull('status');
     }
 
+    /**
+     * Makeups still owed on a day later than $date, in either shape.
+     *
+     * A makeup is a class the student has already agreed to come back for, so it
+     * has one of their prepaid sessions spoken for. Both shapes count — see
+     * MAKEUP_MARKER: the current one points forward from the postponed row, the
+     * legacy one is an unmarked row sitting on the day it lands.
+     *
+     * Only makeups AFTER $date. One that has already come and gone unmarked is
+     * its own problem, and letting it go on cancelling out the student's
+     * timetable would hide live classes for as long as the row survives.
+     */
+    public function scopeMakeupOwedAfter(Builder $query, string $date): Builder
+    {
+        return $query->where(fn (Builder $q) => $q
+            ->where(fn (Builder $current) => $current
+                ->where('status', SessionStatus::Postponed)
+                ->whereNotNull('rescheduled_date')
+                ->where('rescheduled_date', '>', $date))
+            ->orWhere(fn (Builder $legacy) => $legacy
+                ->whereNull('status')
+                ->where('postpone_reason', 'like', self::MAKEUP_MARKER.'%')
+                ->where('scheduled_date', '>', $date)));
+    }
+
     // ------------------------------------------------------------------ helpers
 
     public function isEarly(): bool
