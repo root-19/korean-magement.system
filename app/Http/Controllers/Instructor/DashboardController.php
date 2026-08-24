@@ -112,7 +112,6 @@ class DashboardController extends Controller
 
         $timetabled = $this->timetabledStudentsByWeekday($instructorId);
         $makeups = $this->makeupStudentsByDate($instructorId, $start, $end);
-        $balances = StudentProfile::forInstructor($instructorId)->pluck('sessions_remaining', 'user_id');
         $today = CarbonImmutable::today();
 
         $cells = [];
@@ -130,18 +129,18 @@ class DashboardController extends Controller
             // day it lands on holds nothing until the class is marked. Counting
             // only rows left the calendar blank on exactly the day the student
             // comes back — the day the instructor most needs to see.
-            $pending = $this->countableMakeups(
+            $pending = array_diff(
                 $makeups[$dateString] ?? [],
                 $rows->pluck('student_id')->map(fn ($id) => (int) $id)->all(),
-                $balances,
             );
 
             $isUpcoming = $day->gt($today);
 
-            $slots = $timetabled[$day->dayOfWeekIso] ?? [];
-
+            // Union of student ids, not a sum: rosterFor keys by student, so a
+            // student with both a regular slot and a makeup on one day is one
+            // row there and must be one class here.
             $expected = $isUpcoming
-                ? array_merge($slots, $this->countableMakeups($makeups[$dateString] ?? [], $slots, $balances))
+                ? array_unique(array_merge($timetabled[$day->dayOfWeekIso] ?? [], $pending))
                 : [];
 
             $cells[] = [
@@ -159,32 +158,10 @@ class DashboardController extends Controller
     }
 
     /**
-     * The makeups on a date that count as a class of their own.
-     *
-     * A makeup landing on a day the student already has a class on is a second
-     * class only while their balance covers both — DayRoster lists the day by the
-     * same rule, so the count on a cell and the roster it opens agree. Below that
-     * the makeup IS the day's class and was already counted with it.
-     *
-     * @param  array<int, int>  $makeups  Students with a makeup on the date
-     * @param  array<int, int>  $alreadyOnTheDay  Students with a class there already
-     * @param  Collection<int, int>  $balances  sessions_remaining, keyed by student
-     * @return array<int, int>
-     */
-    private function countableMakeups(array $makeups, array $alreadyOnTheDay, Collection $balances): array
-    {
-        return array_values(array_filter(
-            $makeups,
-            fn (int $studentId) => ! in_array($studentId, $alreadyOnTheDay, true)
-                || DayRoster::makeupNeedsOwnRow((int) $balances->get($studentId, 0), 1),
-        ));
-    }
-
-    /**
      * Which students are timetabled on each ISO weekday.
      *
-     * Same population as group 1 of rosterFor. Ids rather than a count, so a
-     * makeup landing on a slot day can be told apart from the slot itself.
+     * Same population as group 1 of rosterFor. Ids rather than a count, so days
+     * can be merged with the makeups below without double-counting a student.
      *
      * @return array<int, array<int, int>>
      */

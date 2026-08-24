@@ -534,16 +534,16 @@ class PostponeTest extends TestCase
             ->assertSee('Wednesday, August 19 — 1 class scheduled');
     }
 
-    // --------------------------------------------- and where it is listed twice
+    // ------------------------------------------- and how many lines it takes up
 
     #[Test]
-    public function a_makeup_is_listed_beside_the_regular_class_it_lands_on(): void
+    public function a_makeup_landing_on_a_regular_class_day_stays_one_line(): void
     {
-        // Monday is already this student's class, so a makeup moved onto it is a
-        // SECOND class that day. Keying the roster by student merged the two: the
-        // Monday class was relabelled "Makeup for Aug 7" and the class Monday
-        // owed in its own right disappeared, leaving one line for two classes.
-        // Legacy listed the student twice for exactly this case.
+        // Monday is already this student's class and the makeup moved onto it, so
+        // the day holds one line that says both things. Listing the makeup
+        // separately was tried and read as the same student twice — and the
+        // second line could never be marked: a day holds one slot per student
+        // (class_sessions_slot_unique), so only one of the two could be recorded.
         $this->postponeFriday([
             'reschedule' => 'manual',
             'rescheduled_date' => '2026-08-10',
@@ -553,65 +553,17 @@ class PostponeTest extends TestCase
 
         $rows = $this->rosterRows('2026-08-10');
 
-        $this->assertCount(2, $rows);
-
-        $this->assertStringNotContainsString('Makeup for', $rows[0], 'Monday is Monday, not a makeup');
-        $this->assertStringContainsString('Present', $rows[0], 'and it is the line that gets marked');
-
-        $this->assertStringContainsString('Makeup for Aug 7', $rows[1]);
-        $this->assertStringContainsString('back Mon, Aug 10', $rows[1], 'the postponement it repays');
-    }
-
-    #[Test]
-    public function the_regular_class_keeps_its_own_hour_when_a_makeup_lands_on_it(): void
-    {
-        // The merged row took the makeup's agreed time too, so the one line that
-        // says when to teach named 3 PM for a class still due at 6:30.
-        $this->postponeFriday([
-            'reschedule' => 'manual',
-            'rescheduled_date' => '2026-08-10',
-            'rescheduled_time' => '15:00',
-        ]);
-
-        $this->moveClockTo('2026-08-10');
-
-        // 3 PM comes before the 6:30 PM slot, so the makeup leads the day here.
-        $rows = $this->rosterRows('2026-08-10');
-
-        $this->assertStringContainsString('3:00 PM', $rows[0]);
+        $this->assertCount(1, $rows, 'one student, one line');
+        $this->assertStringContainsString('A100 Postpone Me', $rows[0]);
         $this->assertStringContainsString('Makeup for Aug 7', $rows[0]);
-
-        $this->assertStringContainsString('6:30 PM', $rows[1]);
-        $this->assertStringNotContainsString('Makeup for', $rows[1]);
+        $this->assertStringContainsString('Present', $rows[0], 'and it is markable');
     }
 
     #[Test]
-    public function the_makeup_is_the_days_class_when_it_is_the_last_session_left(): void
+    public function the_calendar_counts_that_day_once_as_well(): void
     {
-        // One session left is one class: it moved onto Monday, so Monday IS that
-        // class. A second line would offer a class the student has not bought,
-        // and only one of the two could ever be marked — a day holds one slot per
-        // student (class_sessions_slot_unique).
-        StudentProfile::firstOrFail()->update(['sessions_remaining' => 1]);
-
-        $this->postponeFriday([
-            'reschedule' => 'manual',
-            'rescheduled_date' => '2026-08-10',
-        ]);
-
-        $this->moveClockTo('2026-08-10');
-
-        $rows = $this->rosterRows('2026-08-10');
-
-        $this->assertCount(1, $rows);
-        $this->assertStringContainsString('Makeup for Aug 7', $rows[0]);
-    }
-
-    #[Test]
-    public function the_calendar_counts_the_makeup_on_top_of_the_class_it_lands_on(): void
-    {
-        // The dot has to agree with the roster it opens: two lines on Monday, two
-        // classes on the calendar.
+        // The dot has to agree with the roster it opens: one line on Monday, one
+        // class on the calendar.
         $this->postponeFriday([
             'reschedule' => 'manual',
             'rescheduled_date' => '2026-08-10',
@@ -620,24 +572,7 @@ class PostponeTest extends TestCase
         $this->actingAs($this->instructor)
             ->get(route('instructor.dashboard'))
             ->assertOk()
-            ->assertSee('Monday, August 10 — 2 classes scheduled');
-    }
-
-    #[Test]
-    public function the_heading_counts_the_students_not_their_lines(): void
-    {
-        // Two lines for one student is two classes, not two students.
-        $this->postponeFriday([
-            'reschedule' => 'manual',
-            'rescheduled_date' => '2026-08-10',
-        ]);
-
-        $this->moveClockTo('2026-08-10');
-
-        $this->actingAs($this->instructor)
-            ->get(route('instructor.classes.index', ['date' => '2026-08-10']))
-            ->assertOk()
-            ->assertSee('1 student scheduled');
+            ->assertSee('Monday, August 10 — 1 class scheduled');
     }
 
     // ------------------------------------------------- when it is called off

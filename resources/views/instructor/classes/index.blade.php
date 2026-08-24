@@ -34,10 +34,6 @@
         // row on a future date offered "For evaluation", the control for
         // reopening a class that has already passed.
         $isUpcoming = $date->startOfDay()->isFuture();
-
-        // Rows are classes, and one student can hold two of them when a makeup
-        // lands beside their regular class, so the heading counts the people.
-        $studentCount = $roster->unique(fn (array $row) => $row['student']->id)->count();
     @endphp
 
     @if (! $date->isToday())
@@ -51,7 +47,7 @@
 
     <x-card flush>
         <x-slot:title>
-            {{ $studentCount }} {{ Str::plural('student', $studentCount) }} scheduled
+            {{ $roster->count() }} {{ Str::plural('student', $roster->count()) }} scheduled
         </x-slot:title>
 
         <x-slot:subtitle>

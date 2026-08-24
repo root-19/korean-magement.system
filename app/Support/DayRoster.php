@@ -39,9 +39,10 @@ use Illuminate\Support\Facades\DB;
  * the list was still timetable-only, so a postponed Friday class moved to Monday
  * appeared on neither page.
  *
- * A day can list one student twice, so these rows are NOT keyed by student: a
- * makeup landing on a day they already have a class on is a second class and gets
- * a line of its own — see makeupNeedsOwnRow.
+ * Rows are keyed by student: one line per student per day. A makeup landing on a
+ * day they already have a class on labels that line rather than adding a second
+ * one — two lines read as the same student listed twice, and only one of them
+ * could ever be marked (class_sessions holds one slot per student per day).
  *
  * @phpstan-type RosterRow array{
  *     student: User,
@@ -114,36 +115,12 @@ final class DayRoster
         foreach ($pointers as $session) {
             $existing = $rows->get($session->student_id);
 
-            // A makeup landing on a day the student already has a class on is a
-            // SECOND class, not another name for the first. Keying every row by
-            // student merged the two, so the regular class was relabelled
-            // "Makeup for <date>", took the makeup's hour, and the instructor was
-            // left one line for two classes — the ticket A06 raised about a
-            // student postponed onto their own next slot day after day. Legacy
-            // listed them twice for exactly this case (app/views/instructor/
-            // classes.php, "Allow duplicate student IDs so students can appear
-            // twice if they have both regular class and makeup class").
-            $held = self::rowsFor($rows, $session->student_id);
-
-            if ($existing !== null && self::makeupNeedsOwnRow((int) ($existing['profile']?->sessions_remaining ?? 0), $held)) {
-                $rows->put('makeup:'.$session->id, [
-                    'student' => $existing['student'],
-                    'profile' => $existing['profile'],
-                    'time' => $session->rescheduled_time ?: $session->makeup_time ?: $existing['time'],
-                    // The postponed slot, not this day's slot: it is the class
-                    // this line is here to repay, so it carries the reason it
-                    // moved and clearing it is what calls the makeup off. The
-                    // day's own row stays the one that gets marked — a day holds
-                    // one slot per student (class_sessions_slot_unique), so the
-                    // two classes cannot both be recorded against this date.
-                    'session' => $session,
-                    'makeup_for' => $session->scheduled_date,
-                    'is_extra' => true,
-                ]);
-
-                continue;
-            }
-
+            // One line per student per day, even when a makeup lands on a day
+            // they already have a class on. Listing the makeup separately was
+            // tried and read as a duplicated student — and the second line could
+            // never be marked anyway: a day holds one slot per student
+            // (class_sessions_slot_unique), so the two classes cannot both be
+            // recorded against this date.
             $rows->put($session->student_id, [
                 'student' => $existing['student'] ?? $session->student,
                 'profile' => $existing['profile'] ?? $session->student?->studentProfile,
@@ -166,58 +143,8 @@ final class DayRoster
         $rows = self::withoutFullyBookedStudents($rows, $instructorId, $date);
 
         return self::withReportsAndRequests($rows, $instructorId, $dateString)
-            // A makeup sits under the class it accompanies when both fall at the
-            // same hour, so the line the instructor marks comes first.
-            ->sortBy(fn (array $row) => [
-                $row['time'] === null,
-                $row['time'],
-                $row['student']->name,
-                $row['makeup_for'] !== null,
-            ])
+            ->sortBy(fn (array $row) => [$row['time'] === null, $row['time'], $row['student']->name])
             ->values();
-    }
-
-    /**
-     * Whether a makeup landing on a day the student already has a class on is
-     * listed as a class of its own there.
-     *
-     * Two lines are two classes, so paying for both takes two prepaid sessions.
-     * With a single session left the makeup IS the day's class — that slot is
-     * where the moved session landed — and a second line would offer a class the
-     * student has not bought. Above that the day genuinely owes both, and merging
-     * them hid one of them.
-     *
-     * Shared with the dashboard calendar so a day's count and the roster it opens
-     * cannot disagree.
-     */
-    public static function makeupNeedsOwnRow(int $sessionsRemaining, int $classesAlreadyOnTheDay): bool
-    {
-        return $sessionsRemaining > $classesAlreadyOnTheDay;
-    }
-
-    /**
-     * How many lines this student already holds on the day.
-     *
-     * @param  Collection<array-key, array<string, mixed>>  $rows
-     */
-    private static function rowsFor(Collection $rows, int $studentId): int
-    {
-        return $rows->filter(fn (array $row) => $row['student']?->id === $studentId)->count();
-    }
-
-    /**
-     * The students behind a set of rows.
-     *
-     * Rows are no longer one per student — a makeup gets a line beside the class
-     * it lands on — so the keys are not student ids and lookups have to go
-     * through the row.
-     *
-     * @param  Collection<array-key, array<string, mixed>>  $rows
-     * @return array<int, int>
-     */
-    private static function studentIds(Collection $rows): array
-    {
-        return $rows->map(fn (array $row) => $row['student']->id)->unique()->values()->all();
     }
 
     /**
@@ -248,7 +175,7 @@ final class DayRoster
 
         $justMarked = ClassSession::query()
             ->where('instructor_id', $instructorId)
-            ->whereIn('student_id', self::studentIds($finished))
+            ->whereIn('student_id', $finished->keys())
             ->whereNotNull('status')
             ->where('marked_at', '>=', CarbonImmutable::now()->subDay())
             ->pluck('student_id')
@@ -256,8 +183,8 @@ final class DayRoster
             ->all();
 
         return $rows->reject(
-            fn (array $row, $key) => $finished->has($key)
-                && ! in_array($row['student']->id, $justMarked, true)
+            fn (array $row, int $studentId) => $finished->has($studentId)
+                && ! in_array($studentId, $justMarked, true)
         );
     }
 
@@ -295,15 +222,15 @@ final class DayRoster
 
         $owed = ClassSession::query()
             ->where('instructor_id', $instructorId)
-            ->whereIn('student_id', self::studentIds($projected))
+            ->whereIn('student_id', $projected->keys())
             ->makeupOwedAfter($date->toDateString())
             ->pluck('student_id')
             ->countBy(fn ($id) => (int) $id);
 
-        return $rows->reject(function (array $row, $key) use ($projected, $owed) {
-            $promised = (int) $owed->get($row['student']->id, 0);
+        return $rows->reject(function (array $row, int $studentId) use ($projected, $owed) {
+            $promised = (int) $owed->get($studentId, 0);
 
-            return $projected->has($key)
+            return $projected->has($studentId)
                 && $promised > 0
                 && ($row['profile']?->sessions_remaining ?? 0) <= $promised;
         });
@@ -362,26 +289,24 @@ final class DayRoster
             ->get()
             ->keyBy('student_id');
 
-        // The date each row's report would be filed under, per row rather than
-        // per student: a makeup listed beside the day's own class files under the
-        // date it repays, and only one of the two lines is the filed one.
+        // The date each row's report would be filed under.
         $reportDates = $rows->map(
             fn (array $row) => $row['session']?->paid_date?->toDateString() ?? $dateString
         );
 
         $filed = DB::table('session_reports')
             ->where('instructor_id', $instructorId)
-            ->whereIn('student_id', self::studentIds($rows))
+            ->whereIn('student_id', $reportDates->keys())
             ->whereIn('class_date', $reportDates->unique()->values())
             ->get(['student_id', 'class_date'])
             // Keyed by the pair: a student with reports on several dates must not
             // make every one of their rows look filed.
             ->keyBy(fn ($report) => $report->student_id.'|'.$report->class_date);
 
-        return $rows->map(function (array $row, $key) use ($filed, $requests, $reportDates) {
+        return $rows->map(function (array $row) use ($filed, $requests, $reportDates) {
             $id = $row['student']->id;
 
-            $row['has_report'] = $filed->has($id.'|'.$reportDates->get($key));
+            $row['has_report'] = $filed->has($id.'|'.$reportDates->get($id));
             $row['request'] = $requests->get($id);
 
             return $row;
