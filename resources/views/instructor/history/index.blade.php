@@ -5,17 +5,32 @@
 @section('subheading', $totals['total'].' '.Str::plural('class', $totals['total']).' taught'.($totals['first_class'] ? ' since '.\Carbon\Carbon::parse($totals['first_class'])->format('M Y') : ''))
 
 @section('content')
-    <div class="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
+    {{-- Absent and Postponed take the same tones as their badges in the table
+         below, so a figure up here and a row down there read as the same thing. --}}
+    <div class="grid gap-4 sm:grid-cols-3 xl:grid-cols-6">
         <x-stat-card label="Total classes" value="{{ $totals['total'] }}" icon="book" tone="brand" />
         <x-stat-card label="Present" value="{{ $totals['present'] }}" icon="check-circle" tone="success" />
-        <x-stat-card label="Absent" value="{{ $totals['absent'] }}" icon="x-circle" tone="warning" />
+        <x-stat-card label="Absent" value="{{ $totals['absent'] }}" icon="x-circle" tone="danger" />
+        <x-stat-card label="Postponed" value="{{ $totals['postponed'] }}" icon="forward" tone="warning"
+                     hint="Never taught" />
         <x-stat-card label="Students taught" value="{{ $totals['students'] }}" icon="users" />
         <x-stat-card label="Reports filed" value="{{ $totals['reports'] }}" icon="clipboard"
                      hint="{{ $totals['present'] > 0 ? round($totals['reports'] / max(1, $totals['present']) * 100).'% of present' : '' }}" />
     </div>
 
-    {{-- Date range + status filter --}}
+    {{-- Student + date range + status filter --}}
     <form method="GET" class="mt-4 flex flex-wrap items-end gap-3">
+        <div>
+            <label for="student_id" class="form-label !text-xs">Student</label>
+            <select id="student_id" name="student_id" class="form-select !w-auto !py-1.5 text-xs">
+                <option value="">All students</option>
+                @foreach ($students as $option)
+                    <option value="{{ $option->id }}" @selected($selectedStudentId === $option->id)>
+                        {{ $option->name }}{{ $option->trashed() ? ' (archived)' : '' }}
+                    </option>
+                @endforeach
+            </select>
+        </div>
         <div>
             <label for="from" class="form-label !text-xs">From</label>
             <input id="from" type="date" name="from" value="{{ $from }}" class="form-input numeric !w-auto !py-1.5 text-xs">
@@ -36,12 +51,80 @@
 
         <button type="submit" class="btn-primary btn-sm">Filter</button>
 
-        @if ($from || $to || $selectedStatus)
+        @if ($from || $to || $selectedStatus || $selectedStudentId)
             <a href="{{ route('instructor.history.index') }}" class="btn-ghost btn-sm">Clear</a>
         @endif
     </form>
 
-    <x-card class="mt-4" flush>
+    {{-- Per-student tally. The status filter is not applied to it: this is what
+         you read to decide which status is worth filtering the list below by. --}}
+    <x-card class="mt-4"
+            title="Attendance by student"
+            :subtitle="$byStudent->count().' '.Str::plural('student', $byStudent->count()).($from || $to ? ' in this range' : '')"
+            flush>
+        @if ($byStudent->isEmpty())
+            <x-empty-state icon="users"
+                           title="No students in this range"
+                           message="Once you mark a class, each student's running present, absent and postponed tally appears here." />
+        @else
+            <div class="table-wrap">
+                <table class="table">
+                    <thead>
+                        <tr>
+                            <th>Student</th>
+                            <th>Classes</th>
+                            <th>Present</th>
+                            <th>Absent (student)</th>
+                            <th>Absent (me)</th>
+                            <th>Postponed</th>
+                            <th>Last class</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        @foreach ($byStudent as $row)
+                            <tr>
+                                <td>
+                                    {{-- Filters the whole page to this student rather than
+                                         leaving the page, so the tally and the class list
+                                         stay side by side. --}}
+                                    <a href="{{ route('instructor.history.index', array_filter([
+                                           'student_id' => $row['student']?->id,
+                                           'from' => $from,
+                                           'to' => $to,
+                                           'status' => $selectedStatus,
+                                       ])) }}"
+                                       class="focus-ring flex items-center gap-2.5 rounded">
+                                        <x-avatar :user="$row['student']" class="h-8 w-8" />
+                                        <span class="min-w-0">
+                                            <span class="block truncate font-medium text-white">
+                                                {{ $row['student']?->name ?? 'Deleted student' }}
+                                            </span>
+                                            @if ($row['student']?->trashed())
+                                                <span class="badge-neutral mt-0.5">Archived</span>
+                                            @endif
+                                        </span>
+                                    </a>
+                                </td>
+                                <td class="numeric font-medium text-gray-300">{{ $row['total'] }}</td>
+                                <td class="numeric font-medium text-success-400">{{ $row['present'] }}</td>
+                                <td class="numeric font-medium text-danger-400">{{ $row['student_absent'] }}</td>
+                                <td class="numeric font-medium text-danger-400">{{ $row['teacher_absent'] }}</td>
+                                <td class="numeric font-medium text-warning-400">{{ $row['postponed'] }}</td>
+                                <td class="numeric whitespace-nowrap text-gray-500">
+                                    {{ $row['last_class'] ? \Carbon\Carbon::parse($row['last_class'])->format('M j, Y') : '—' }}
+                                </td>
+                            </tr>
+                        @endforeach
+                    </tbody>
+                </table>
+            </div>
+        @endif
+    </x-card>
+
+    <x-card class="mt-4"
+            :title="$selectedStudentId ? $students->get($selectedStudentId)->name.' — every class' : 'Every class'"
+            :subtitle="$sessions->total().' '.Str::plural('record', $sessions->total())"
+            flush>
         @if ($sessions->isEmpty())
             <x-empty-state icon="book"
                            title="No classes in this range"

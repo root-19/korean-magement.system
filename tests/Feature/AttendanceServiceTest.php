@@ -152,6 +152,52 @@ class AttendanceServiceTest extends TestCase
     }
 
     #[Test]
+    public function correcting_student_absent_to_present_does_not_deduct_twice(): void
+    {
+        // The student turned up after all. Both states consume one session, so
+        // the correction must move `attended` and leave `remaining` alone.
+        // mark() used to drop the row's old absent_by before working out the
+        // delta, so the absence read as "did not consume" and the student paid
+        // for the same class twice.
+        $this->service->mark(
+            $this->instructor,
+            $this->student,
+            '2025-08-04',
+            SessionStatus::Absent,
+            Party::Student,
+        );
+        $this->assertSame(['attended' => 0, 'remaining' => 9], $this->counters());
+
+        $this->service->mark($this->instructor, $this->student, '2025-08-04', SessionStatus::Present);
+
+        $this->assertSame(['attended' => 1, 'remaining' => 9], $this->counters());
+    }
+
+    #[Test]
+    public function correcting_student_absent_to_teacher_absent_returns_the_session(): void
+    {
+        // It was the teacher who missed it, so the credit goes back — the same
+        // lost absent_by left the student short instead.
+        $this->service->mark(
+            $this->instructor,
+            $this->student,
+            '2025-08-04',
+            SessionStatus::Absent,
+            Party::Student,
+        );
+
+        $this->service->mark(
+            $this->instructor,
+            $this->student,
+            '2025-08-04',
+            SessionStatus::Absent,
+            Party::Teacher,
+        );
+
+        $this->assertSame(['attended' => 0, 'remaining' => 10], $this->counters());
+    }
+
+    #[Test]
     public function clearing_a_marking_rolls_the_counters_back(): void
     {
         $session = $this->service->mark(

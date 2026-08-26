@@ -52,6 +52,11 @@ class AttendanceService
                 ->first();
 
             $previousStatus = $session?->status;
+            // Captured before the fill below overwrites it. Without it the delta
+            // in syncCounters reads a student-absence as "did not consume", so
+            // correcting one to present deducted a second session and correcting
+            // it to teacher-absent never gave the session back.
+            $previousAbsentBy = $session?->absent_by;
 
             if ($session === null) {
                 $session = new ClassSession([
@@ -85,7 +90,7 @@ class AttendanceService
 
             $session->save();
 
-            $this->syncCounters($student, $previousStatus, $status, $session->absent_by);
+            $this->syncCounters($student, $previousStatus, $status, $session->absent_by, $previousAbsentBy);
 
             return $session->refresh();
         });
@@ -156,6 +161,7 @@ class AttendanceService
             ]);
 
             $previousStatus = $session->status;
+            $previousAbsentBy = $session->absent_by;
 
             $session->fill([
                 'held_date' => $held->toDateString(),
@@ -171,7 +177,7 @@ class AttendanceService
 
             $session->save();
 
-            $this->syncCounters($student, $previousStatus, SessionStatus::Present, null);
+            $this->syncCounters($student, $previousStatus, SessionStatus::Present, null, $previousAbsentBy);
 
             AuditLog::record(
                 action: 'class.marked_early',
