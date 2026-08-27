@@ -101,8 +101,6 @@ class StudentDeletionService
                 ]);
             }
 
-            $preserved = $this->recordsFor(collect([$student]))[$student->id];
-
             $request->update([
                 'status' => StudentDeletionRequest::APPROVED,
                 'decided_by' => $admin->id,
@@ -110,28 +108,53 @@ class StudentDeletionService
                 'decision_note' => $note,
             ]);
 
-            AuditLog::record(
-                action: 'student.deleted',
-                subject: $student,
-                targetName: $request->student_name,
-                details: [
-                    'instructor_id' => $request->instructor_id,
-                    'reason' => $request->reason,
-                    'decision_note' => $note,
-                    'preserved' => $preserved,
-                ],
-                userId: $admin->id,
-            );
-
-            // `deleted_by` is not fillable — it is written here and nowhere else,
-            // so a deletion can always be traced to the admin who approved it.
-            $student->is_active = false;
-            $student->deleted_by = $admin->id;
-            $student->save();
-
-            $student->delete();
+            $this->remove($admin, $student, $request->student_name, [
+                'instructor_id' => $request->instructor_id,
+                'reason' => $request->reason,
+                'decision_note' => $note,
+            ]);
 
             return $request->refresh();
+        });
+    }
+
+    /**
+     * Delete a student outright, with no request to approve.
+     *
+     * The queue exists for what an INSTRUCTOR asks for; an admin is already the
+     * approver, so making them file a request against themselves would only add
+     * a round trip. The outcome is identical to approving one — see remove().
+     *
+     * A pending request for the same student is settled by the same action, so
+     * the queue does not go on asking for something already done.
+     */
+    public function delete(User $admin, User $student, ?string $reason = null): User
+    {
+        return DB::transaction(function () use ($admin, $student, $reason) {
+            if ($student->trashed()) {
+                throw ValidationException::withMessages([
+                    'student' => "{$student->name} is already deleted.",
+                ]);
+            }
+
+            $student->loadMissing('studentProfile');
+
+            StudentDeletionRequest::query()
+                ->where('student_id', $student->id)
+                ->pending()
+                ->update([
+                    'status' => StudentDeletionRequest::APPROVED,
+                    'decided_by' => $admin->id,
+                    'decided_at' => now(),
+                    'decision_note' => $reason,
+                ]);
+
+            $this->remove($admin, $student, $student->name, [
+                'reason' => $reason,
+                'requested' => false,
+            ]);
+
+            return $student;
         });
     }
 
@@ -218,6 +241,37 @@ class StudentDeletionService
                 ]];
             })
             ->all();
+    }
+
+    /**
+     * Take the student out of the application.
+     *
+     * Deactivated and soft-deleted in one step, so they are gone from every
+     * list, roster and login — see the class comment for why the row itself
+     * stays. Payroll reads that row through a raw join and is unaffected.
+     *
+     * $targetName is passed in because an approval names the student as they
+     * were when the request was filed, not as they are now.
+     *
+     * @param  array<string, mixed>  $details  what the audit entry should carry
+     */
+    private function remove(User $admin, User $student, string $targetName, array $details): void
+    {
+        AuditLog::record(
+            action: 'student.deleted',
+            subject: $student,
+            targetName: $targetName,
+            details: $details + ['preserved' => $this->recordsFor(collect([$student]))[$student->id]],
+            userId: $admin->id,
+        );
+
+        // `deleted_by` is not fillable — it is written here and nowhere else, so
+        // a deletion can always be traced to the admin who carried it out.
+        $student->is_active = false;
+        $student->deleted_by = $admin->id;
+        $student->save();
+
+        $student->delete();
     }
 
     private function assertPending(StudentDeletionRequest $request): void

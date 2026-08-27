@@ -7,6 +7,7 @@ use App\Enums\SessionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ClassSession;
 use App\Models\SessionReport;
+use App\Models\StudentProfile;
 use App\Models\User;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\JsonResponse;
@@ -186,20 +187,39 @@ class SessionReportController extends Controller
             'previous' => $this->previousReport($instructorId, $student->id, $date),
 
             // Where the student is in their plan — "5 of 15 taught, 10 left".
-            // sessionsPurchased() owns the accounting identity (attended +
-            // student-absent + remaining + deducted), so it is not restated here.
-            'progress' => array_merge([
-                'attended' => (int) ($profile?->sessions_attended ?? 0),
-                'purchased' => (int) ($profile?->sessionsPurchased() ?? 0),
-                'remaining' => (int) ($profile?->sessions_remaining ?? 0),
-            ], $this->attendanceCounts($instructorId, $student->id)),
+            'progress' => $this->progress($profile, $instructorId, $student->id),
         ]);
     }
 
     /**
-     * Absences and postponements for this student, split by who is
-     * responsible — the breakdown the Copy All text and the summary card
-     * both need, so it is asked for once and reused.
+     * Where the student is in their plan, as the student page reports it:
+     * classes taught, the plan total, what is left, and what was written off
+     * at enrolment — plus the absence breakdown.
+     *
+     * `attended` counts attendance rows rather than the profile's
+     * hand-maintained counter, so this page and the student page cannot
+     * disagree about how many classes were taught.
+     *
+     * sessionsPurchased() owns the accounting identity (attended +
+     * student-absent + remaining + deducted), so it is not restated here.
+     *
+     * @return array<string, int>
+     */
+    private function progress(?StudentProfile $profile, int $instructorId, int $studentId): array
+    {
+        $counts = $this->attendanceCounts($instructorId, $studentId);
+
+        return array_merge($counts, [
+            'purchased' => (int) ($profile?->sessionsPurchased($counts['student_absent']) ?? 0),
+            'remaining' => (int) ($profile?->sessions_remaining ?? 0),
+            'deducted' => (int) ($profile?->sessions_deducted ?? 0),
+        ]);
+    }
+
+    /**
+     * Attendance for this student: classes taught, and the absences and
+     * postponements split by who is responsible — the breakdown the Copy All
+     * text and the summary card both need, so it is asked for once and reused.
      *
      * @return array<string, int>
      */
@@ -207,11 +227,13 @@ class SessionReportController extends Controller
     {
         $counts = ClassSession::query()
             ->selectRaw('
+                SUM(status = ?) as attended,
                 SUM(status = ? AND absent_by = ?) as student_absent,
                 SUM(status = ? AND absent_by = ?) as teacher_absent,
                 SUM(status = ? AND postponed_by = ?) as student_postponed,
                 SUM(status = ? AND postponed_by = ?) as teacher_postponed
             ', [
+                SessionStatus::Present->value,
                 SessionStatus::Absent->value, Party::Student->value,
                 SessionStatus::Absent->value, Party::Teacher->value,
                 SessionStatus::Postponed->value, Party::Student->value,
@@ -222,6 +244,7 @@ class SessionReportController extends Controller
             ->first();
 
         return [
+            'attended' => (int) ($counts->attended ?? 0),
             'student_absent' => (int) ($counts->student_absent ?? 0),
             'teacher_absent' => (int) ($counts->teacher_absent ?? 0),
             'student_postponed' => (int) ($counts->student_postponed ?? 0),

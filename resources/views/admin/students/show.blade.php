@@ -186,6 +186,26 @@
                     </button>
                 </form>
 
+                {{-- An admin deletes outright: they are the one who would approve
+                     an instructor's request anyway. Restore above undoes it. --}}
+                @unless ($student->trashed())
+                    <form method="POST" action="{{ route('admin.students.destroy', $student) }}"
+                          class="mt-3 space-y-2 border-t border-gray-700 pt-3"
+                          onsubmit="return confirm('Delete {{ $student->name }}? They are removed from every list and can no longer sign in. Their classes and reports are kept.')">
+                        @csrf
+                        @method('DELETE')
+
+                        <input type="text" name="reason" maxlength="1000" class="form-input"
+                               aria-label="Reason for deleting {{ $student->name }}"
+                               placeholder="Reason (optional)">
+
+                        <button type="submit" class="btn-danger w-full">
+                            <x-icon name="trash" class="h-4 w-4" />
+                            Delete student
+                        </button>
+                    </form>
+                @endunless
+
                 <p class="mt-3 text-xs text-gray-500">
                     Archiving and deleting both keep every attendance and report row, so the
                     instructor's earnings are unaffected either way. Nothing is ever hard-deleted.

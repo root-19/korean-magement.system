@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\EnrollmentStatus;
 use App\Enums\SessionStatus;
 use App\Enums\TeachingMethod;
+use App\Models\AuditLog;
 use App\Models\ClassSession;
 use App\Models\SessionReport;
 use App\Models\StudentDeletionRequest;
@@ -360,6 +361,150 @@ class StudentDeletionApprovalTest extends TestCase
             ->get(route('instructor.earnings.index'))
             ->assertOk()
             ->assertSee('A501 Leaving Student');
+    }
+
+    // ------------------------------------------------- the admin's own delete
+
+    #[Test]
+    public function an_admin_can_delete_a_student_outright(): void
+    {
+        $this->actingAs($this->admin)
+            ->delete(route('admin.students.destroy', $this->student), ['reason' => 'Left the academy.'])
+            ->assertRedirect(route('admin.students.index'))
+            ->assertSessionHas('success');
+
+        $this->assertSoftDeleted('users', ['id' => $this->student->id]);
+
+        // Both halves, as an approval does them: invisible everywhere AND unable
+        // to sign in. Traceable to the admin who did it.
+        $deleted = User::withTrashed()->find($this->student->id);
+        $this->assertFalse((bool) $deleted->is_active);
+        $this->assertSame($this->admin->id, $deleted->deleted_by);
+
+        $this->assertDatabaseHas('audit_logs', [
+            'action' => 'student.deleted',
+            'user_id' => $this->admin->id,
+            'target_name' => 'A501 Leaving Student',
+        ]);
+
+        // No request was ever filed — this path does not need one.
+        $this->assertSame(0, StudentDeletionRequest::count());
+    }
+
+    #[Test]
+    public function a_directly_deleted_student_can_be_restored(): void
+    {
+        $this->actingAs($this->admin)->delete(route('admin.students.destroy', $this->student));
+
+        $this->actingAs($this->admin)
+            ->patch(route('admin.students.status', $this->student), [])
+            ->assertRedirect();
+
+        $this->assertNotSoftDeleted('users', ['id' => $this->student->id]);
+
+        $restored = User::find($this->student->id);
+        $this->assertTrue($restored->is_active);
+        $this->assertNull($restored->deleted_by);
+    }
+
+    #[Test]
+    public function deleting_directly_settles_a_request_already_in_the_queue(): void
+    {
+        // Otherwise the queue would go on asking an admin to do what they have
+        // already done, on a student who is no longer there to delete.
+        $request = $this->pendingRequest();
+
+        $this->actingAs($this->admin)
+            ->delete(route('admin.students.destroy', $this->student), ['reason' => 'Agreed, removing now.'])
+            ->assertSessionHasNoErrors();
+
+        $request->refresh();
+
+        $this->assertTrue($request->isApproved());
+        $this->assertSame($this->admin->id, $request->decided_by);
+        $this->assertSame('Agreed, removing now.', $request->decision_note);
+    }
+
+    #[Test]
+    public function an_already_deleted_student_cannot_be_deleted_again(): void
+    {
+        $this->actingAs($this->admin)->delete(route('admin.students.destroy', $this->student));
+
+        // The binding does not resolve trashed students, so there is nothing to
+        // act on a second time.
+        $this->actingAs($this->admin)
+            ->delete(route('admin.students.destroy', $this->student))
+            ->assertNotFound();
+
+        $this->assertSame(1, AuditLog::where('action', 'student.deleted')->count());
+    }
+
+    #[Test]
+    public function deleting_directly_does_not_change_the_instructors_payout(): void
+    {
+        foreach (['2026-08-10', '2026-08-11', '2026-08-12'] as $date) {
+            $this->taughtClass($date);
+        }
+
+        $calculator = app(EarningsCalculator::class);
+        $window = PayoutWindow::forDate($this->today);
+
+        $before = $calculator->forWindow($this->instructor->id, $window);
+        $this->assertGreaterThan(0.0, $before->net());
+
+        $this->actingAs($this->admin)
+            ->delete(route('admin.students.destroy', $this->student))
+            ->assertSessionHasNoErrors();
+
+        $after = $calculator->forWindow($this->instructor->id, $window);
+
+        $this->assertSame($before->net(), $after->net(), 'a deletion must never restate pay');
+        $this->assertCount(3, $after->lines);
+        $this->assertSame(3, ClassSession::where('student_id', $this->student->id)->count());
+        $this->assertSame(3, SessionReport::where('student_id', $this->student->id)->count());
+    }
+
+    #[Test]
+    public function an_instructor_cannot_use_the_admin_delete(): void
+    {
+        $this->actingAs($this->instructor)
+            ->delete(route('admin.students.destroy', $this->student))
+            ->assertForbidden();
+
+        $this->assertNotSoftDeleted('users', ['id' => $this->student->id]);
+    }
+
+    #[Test]
+    public function the_admin_student_pages_offer_the_delete_button(): void
+    {
+        $this->actingAs($this->admin)
+            ->get(route('admin.students.index'))
+            ->assertOk()
+            ->assertSee('Delete A501 Leaving Student');
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.students.show', $this->student))
+            ->assertOk()
+            ->assertSee('Delete student')
+            ->assertSee('Reason (optional)');
+    }
+
+    #[Test]
+    public function the_delete_button_is_gone_once_the_student_is_deleted(): void
+    {
+        $this->actingAs($this->admin)->delete(route('admin.students.destroy', $this->student));
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.students.show', $this->student))
+            ->assertOk()
+            ->assertSee('Restore student')
+            ->assertDontSee('Delete student');
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.students.index', ['filter' => 'archived']))
+            ->assertOk()
+            ->assertSee('A501 Leaving Student')
+            ->assertDontSee('Delete A501 Leaving Student');
     }
 
     // -------------------------------------------------------------- access

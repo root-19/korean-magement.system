@@ -150,11 +150,29 @@
 
                                 <td class="text-right">
                                     @if ($student)
-                                        <a href="{{ route('admin.students.edit', $student) }}"
-                                           class="btn-ghost btn-sm" aria-label="Edit {{ $student->name }}">
-                                            <x-icon name="pencil" class="h-4 w-4" />
-                                            Edit
-                                        </a>
+                                        <div class="flex items-center justify-end gap-1">
+                                            <a href="{{ route('admin.students.edit', $student) }}"
+                                               class="btn-ghost btn-sm" aria-label="Edit {{ $student->name }}">
+                                                <x-icon name="pencil" class="h-4 w-4" />
+                                                Edit
+                                            </a>
+
+                                            {{-- Already-deleted students keep the row for the
+                                                 audit trail; Restore lives on their own page. --}}
+                                            @unless ($student->trashed())
+                                                <form method="POST"
+                                                      action="{{ route('admin.students.destroy', $student) }}"
+                                                      onsubmit="return confirm('Delete {{ $student->name }}? They are removed from every list and can no longer sign in. Their classes and reports are kept.')">
+                                                    @csrf
+                                                    @method('DELETE')
+                                                    <button type="submit" class="btn-ghost btn-sm text-danger-400"
+                                                            aria-label="Delete {{ $student->name }}">
+                                                        <x-icon name="trash" class="h-4 w-4" />
+                                                        Delete
+                                                    </button>
+                                                </form>
+                                            @endunless
+                                        </div>
                                     @endif
                                 </td>
                             </tr>

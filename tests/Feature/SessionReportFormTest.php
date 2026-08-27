@@ -55,6 +55,23 @@ class SessionReportFormTest extends TestCase
         ]);
     }
 
+    /**
+     * Record $count taught classes, one per day, ending the day before the class
+     * this form is about. The page counts attendance rows rather than the
+     * profile's denormalised counter, so a plan has to be given rows to count.
+     */
+    private function taught(int $count): void
+    {
+        for ($i = 1; $i <= $count; $i++) {
+            ClassSession::factory()
+                ->for($this->instructor, 'instructor')
+                ->for($this->student, 'student')
+                ->present()
+                ->on(Carbon::parse($this->date)->subDays($i)->toDateString())
+                ->create();
+        }
+    }
+
     /** @return array<string, mixed> */
     private function payload(array $overrides = []): array
     {
@@ -253,6 +270,8 @@ class SessionReportFormTest extends TestCase
             'sessions_deducted' => 0,
         ]);
 
+        $this->taught(5);
+
         $html = $this->actingAs($this->instructor)
             ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
             ->assertOk()
@@ -266,16 +285,62 @@ class SessionReportFormTest extends TestCase
         $this->assertStringContainsString(
             (string) Js::from([
                 'attended' => 5,
-                'purchased' => 15,
-                'remaining' => 10,
                 'student_absent' => 0,
                 'teacher_absent' => 0,
                 'student_postponed' => 0,
                 'teacher_postponed' => 0,
+                'purchased' => 15,
+                'remaining' => 10,
+                'deducted' => 0,
             ]),
             $html,
         );
         $this->assertStringContainsString('this.progress.attended', $html);
+        $this->assertStringContainsString('this.progress.deducted', $html);
+    }
+
+    #[Test]
+    public function the_taught_and_deducted_counts_match_the_student_page(): void
+    {
+        // The two pages read the same enrolment, so they must not disagree.
+        // `attended` comes from the attendance rows — the profile's own counter
+        // is denormalised and drifts on imported legacy rows.
+        StudentProfile::where('user_id', $this->student->id)->update([
+            'sessions_attended' => 9,
+            'sessions_remaining' => 8,
+            'sessions_deducted' => 3,
+        ]);
+
+        $this->taught(4);
+
+        $html = $this->actingAs($this->instructor)
+            ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
+            ->assertOk()
+            // attended(9, the counter) + student-absent(0) + remaining(8) + deducted(3)
+            ->assertSee('4/20')
+            ->assertSee('3 deducted')
+            ->getContent();
+
+        $this->assertStringContainsString(
+            (string) Js::from([
+                'attended' => 4,
+                'student_absent' => 0,
+                'teacher_absent' => 0,
+                'student_postponed' => 0,
+                'teacher_postponed' => 0,
+                'purchased' => 20,
+                'remaining' => 8,
+                'deducted' => 3,
+            ]),
+            $html,
+        );
+
+        // …and the student page reports the same two figures.
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.students.show', $this->student))
+            ->assertOk()
+            ->assertSeeInOrder(['Attended', '4'])
+            ->assertSeeInOrder(['Deducted', '3']);
     }
 
     #[Test]
@@ -286,6 +351,8 @@ class SessionReportFormTest extends TestCase
             'sessions_remaining' => 10,
             'sessions_deducted' => 0,
         ]);
+
+        $this->taught(5);
 
         ClassSession::factory()->for($this->instructor, 'instructor')->for($this->student, 'student')
             ->studentAbsent()->on('2026-07-01')->create();
@@ -305,12 +372,13 @@ class SessionReportFormTest extends TestCase
         $this->assertStringContainsString(
             (string) Js::from([
                 'attended' => 5,
-                'purchased' => 16,
-                'remaining' => 10,
                 'student_absent' => 1,
                 'teacher_absent' => 1,
                 'student_postponed' => 1,
                 'teacher_postponed' => 1,
+                'purchased' => 16,
+                'remaining' => 10,
+                'deducted' => 0,
             ]),
             $html,
         );
@@ -326,6 +394,8 @@ class SessionReportFormTest extends TestCase
             'sessions_remaining' => 9,
             'sessions_deducted' => 0,
         ]);
+
+        $this->taught(5);
 
         $this->actingAs($this->instructor)
             ->post(route('instructor.classes.attendance'), [

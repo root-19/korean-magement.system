@@ -146,6 +146,7 @@
                         {{ $progress['attended'] }}/{{ $progress['purchased'] }}
                         <span class="text-xs font-normal text-gray-400">
                             attended · {{ $progress['remaining'] }} remaining
+                            · {{ $progress['deducted'] }} deducted
                         </span>
                     </dd>
                 </div>
@@ -262,7 +263,7 @@
                   const out = [...@js($copyHeader), ''];
 
                   {{-- Where the student is in their plan: 5/15 taught, 10 left. --}}
-                  out.push(`Sessions: ${this.progress.attended}/${this.progress.purchased} attended · ${this.progress.remaining} remaining`);
+                  out.push(`Sessions: ${this.progress.attended}/${this.progress.purchased} attended · ${this.progress.remaining} remaining · ${this.progress.deducted} deducted`);
                   out.push(`Absent: ${this.progress.student_absent} student · ${this.progress.teacher_absent} teacher`);
                   out.push(`Postponed: ${this.progress.student_postponed} student · ${this.progress.teacher_postponed} teacher`);
                   out.push('');

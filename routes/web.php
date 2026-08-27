@@ -195,6 +195,11 @@ Route::middleware(['auth', 'role:admin'])
             ->withTrashed()
             ->name('students.status');
 
+        // Deleting a student directly. No withTrashed: an already-deleted
+        // student has nothing left to delete, and 404 says so.
+        Route::delete('/students/{student}', [AdminStudents::class, 'destroy'])
+            ->name('students.destroy');
+
         // Enrolment approval queue
         Route::get('/enrollments', [EnrollmentController::class, 'index'])->name('enrollments.index');
         Route::patch('/enrollments/{enrollment}/approve', [EnrollmentController::class, 'approve'])

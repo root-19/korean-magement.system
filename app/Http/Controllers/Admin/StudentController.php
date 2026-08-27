@@ -15,6 +15,7 @@ use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Models\StudentSchedule;
 use App\Models\User;
+use App\Services\Enrollment\StudentDeletionService;
 use App\Services\Enrollment\StudentEnroller;
 use App\Services\Enrollment\StudentUpdater;
 use Illuminate\Http\RedirectResponse;
@@ -239,6 +240,38 @@ class StudentController extends Controller
             'success',
             "{$student->name} ".($student->is_active ? 'restored' : 'archived').'.'
         );
+    }
+
+    /**
+     * Delete a student.
+     *
+     * An admin needs nobody's approval, so this does outright what approving a
+     * request from the queue does — the same StudentDeletionService call, the
+     * same audit entry, the same soft delete. It is never a hard delete:
+     * class_sessions and session_reports cascade from this row and those rows
+     * ARE the instructor's payout.
+     *
+     * Reversible from the same page: Restore undoes it.
+     */
+    public function destroy(
+        Request $request,
+        User $student,
+        StudentDeletionService $deletions,
+    ): RedirectResponse {
+        abort_unless($student->role === Role::Student, 404);
+
+        $data = $request->validate([
+            'reason' => ['nullable', 'string', 'max:1000'],
+        ]);
+
+        $deletions->delete($request->user(), $student, $data['reason'] ?? null);
+
+        return redirect()
+            ->route('admin.students.index')
+            ->with('success', sprintf(
+                '%s deleted. The classes taught to them are kept, so instructor payouts are unchanged.',
+                $student->name,
+            ));
     }
 
     // ---------------------------------------------------------------- internals
