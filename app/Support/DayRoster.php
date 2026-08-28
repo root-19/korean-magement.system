@@ -25,9 +25,11 @@ use Illuminate\Support\Facades\DB;
  * withoutFinishedStudents, which holds their row for 24 hours after the class
  * that finished them so the report can still be filed from it.
  *
- * Group 1 is trimmed from the other end too: a timetable slot the student has no
- * session left to spend on it is not a class, because a postponement moved that
- * session to the makeup date — see withoutFullyBookedStudents.
+ * Group 1 is trimmed at both ends. A slot outside the student's enrolment dates
+ * is not a class because they were not a student yet — see EnrollmentWindow. A
+ * slot they have no session left to spend on is not a class either, because a
+ * postponement moved that session to the makeup date — see
+ * withoutFullyBookedStudents.
  *
  * Group 3 is the one that keeps going missing. A makeup lands on whatever day
  * the student can come back, very often a weekday they have no slot on at all,
@@ -64,7 +66,7 @@ final class DayRoster
     {
         $dateString = $date->toDateString();
 
-        $rows = self::timetabled($instructorId, $date->dayOfWeekIso);
+        $rows = self::timetabled($instructorId, $date);
 
         // Anyone with a session touching this date, whether or not they are
         // timetabled on it.
@@ -239,11 +241,17 @@ final class DayRoster
     /**
      * Group 1 — the students whose weekly timetable puts them on this weekday.
      *
+     * Bounded by the enrolment window: a timetable is a repeating rule, not a
+     * history, so on its own it projects a student backwards into every week
+     * before they signed up. See EnrollmentWindow for what that cost.
+     *
      * @return Collection<int, array<string, mixed>>
      */
-    private static function timetabled(int $instructorId, int $isoDay): Collection
+    private static function timetabled(int $instructorId, CarbonImmutable $date): Collection
     {
-        return User::query()
+        $isoDay = $date->dayOfWeekIso;
+
+        $query = User::query()
             ->select('users.*')
             ->addSelect('ss.start_time as slot_time')
             ->join('student_profiles as sp', 'sp.user_id', '=', 'users.id')
@@ -255,7 +263,9 @@ final class DayRoster
             ->with(['studentProfile', 'schedules'])
             ->where('sp.instructor_id', $instructorId)
             ->where('sp.enrollment_status', EnrollmentStatus::Approved)
-            ->where('users.is_active', true)
+            ->where('users.is_active', true);
+
+        return EnrollmentWindow::constrain($query, $date->toDateString(), 'sp')
             ->get()
             ->mapWithKeys(fn (User $student) => [$student->id => [
                 'student' => $student,

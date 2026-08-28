@@ -10,6 +10,7 @@ use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Services\Earnings\EarningsCalculator;
 use App\Support\DayRoster;
+use App\Support\EnrollmentWindow;
 use App\Support\PayoutWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\Request;
@@ -140,7 +141,7 @@ class DashboardController extends Controller
             // student with both a regular slot and a makeup on one day is one
             // row there and must be one class here.
             $expected = $isUpcoming
-                ? array_unique(array_merge($timetabled[$day->dayOfWeekIso] ?? [], $pending))
+                ? array_unique(array_merge($this->projectedOn($timetabled, $day), $pending))
                 : [];
 
             $cells[] = [
@@ -158,12 +159,35 @@ class DashboardController extends Controller
     }
 
     /**
-     * Which students are timetabled on each ISO weekday.
+     * The student ids a weekday's timetable puts on one date.
+     *
+     * The weekday lists are fetched once for the month, but the enrolment window
+     * is per-date — a student starting mid-month is timetabled on the 26th and
+     * on no Tuesday before it — so the bound is applied here, cell by cell.
+     *
+     * @param  array<int, array<int, array{id: int, start: ?string, end: ?string}>>  $timetabled
+     * @return array<int, int>
+     */
+    private function projectedOn(array $timetabled, CarbonImmutable $day): array
+    {
+        $date = $day->toDateString();
+
+        $enrolled = array_filter(
+            $timetabled[$day->dayOfWeekIso] ?? [],
+            fn (array $student) => EnrollmentWindow::covers($student['start'], $student['end'], $date),
+        );
+
+        return array_column($enrolled, 'id');
+    }
+
+    /**
+     * Which students are timetabled on each ISO weekday, with their enrolment
+     * dates so projectedOn can drop the days outside them.
      *
      * Same population as group 1 of rosterFor. Ids rather than a count, so days
      * can be merged with the makeups below without double-counting a student.
      *
-     * @return array<int, array<int, int>>
+     * @return array<int, array<int, array{id: int, start: ?string, end: ?string}>>
      */
     private function timetabledStudentsByWeekday(int $instructorId): array
     {
@@ -179,7 +203,13 @@ class DashboardController extends Controller
         return DB::table('student_schedules as ss')
             ->join('student_profiles as sp', 'sp.user_id', '=', 'ss.student_id')
             ->join('users', 'users.id', '=', 'ss.student_id')
-            ->select('ss.day_of_week as day', 'ss.student_id', 'sp.sessions_remaining')
+            ->select(
+                'ss.day_of_week as day',
+                'ss.student_id',
+                'sp.sessions_remaining',
+                'sp.start_date',
+                'sp.end_date',
+            )
             ->where('sp.instructor_id', $instructorId)
             ->where('sp.enrollment_status', EnrollmentStatus::Approved->value)
             ->where('users.is_active', true)
@@ -195,8 +225,12 @@ class DashboardController extends Controller
                 return $promised > 0 && (int) $row->sessions_remaining <= $promised;
             })
             ->groupBy('day')
-            ->map(fn ($rows) => $rows->pluck('student_id')->map(fn ($id) => (int) $id)->all())
-            ->mapWithKeys(fn ($ids, $day) => [(int) $day => $ids])
+            ->map(fn ($rows) => $rows->map(fn ($row) => [
+                'id' => (int) $row->student_id,
+                'start' => $row->start_date === null ? null : substr((string) $row->start_date, 0, 10),
+                'end' => $row->end_date === null ? null : substr((string) $row->end_date, 0, 10),
+            ])->values()->all())
+            ->mapWithKeys(fn ($students, $day) => [(int) $day => $students])
             ->all();
     }
 
