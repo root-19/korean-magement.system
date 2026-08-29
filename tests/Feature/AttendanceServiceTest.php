@@ -100,7 +100,13 @@ class AttendanceServiceTest extends TestCase
     #[Test]
     public function postponing_does_not_consume_a_session(): void
     {
-        $this->service->postpone($this->instructor, $this->student, '2025-08-04', Party::Student);
+        $this->service->postpone(
+            $this->instructor,
+            $this->student,
+            '2025-08-04',
+            Party::Student,
+            rescheduledDate: '2025-08-11',
+        );
 
         $this->assertSame(['attended' => 0, 'remaining' => 10], $this->counters());
     }

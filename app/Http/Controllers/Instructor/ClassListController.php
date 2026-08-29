@@ -88,6 +88,11 @@ class ClassListController extends Controller
             ->where('student_profiles.instructor_id', $instructor->id)
             ->where('student_profiles.enrollment_status', EnrollmentStatus::Approved)
             ->where('users.is_active', true)
+            // The join is raw, so the User model's soft-delete scope never runs
+            // and is_active does not stand in for it. An archived student whose
+            // flag was left on listed a row here with no name on it: the `user`
+            // relation DOES apply the scope, so it came back null.
+            ->whereNull('users.deleted_at')
             ->tap($filter)
             ->orderBy('users.name')
             ->paginate(30)

@@ -660,4 +660,72 @@ class PostponeTest extends TestCase
             ->assertSee('Absent (Student)')
             ->assertDontSee('Deducted from payout');
     }
+
+    // ------------------------------------------------- a makeup date is required
+
+    #[Test]
+    public function a_postponement_with_no_makeup_date_is_refused(): void
+    {
+        // A trial student has no weekly timetable, so MakeupSchedule has no slot
+        // to offer and returns a null auto date. The modal forces manual entry
+        // in that case, but the endpoint is a plain POST and used to accept the
+        // null: the class was written postponed with nowhere to come back to and
+        // appeared on no roster, ever.
+        $trial = User::factory()->student()->create(['name' => 'A101 No Timetable']);
+
+        StudentProfile::factory()->create([
+            'user_id' => $trial->id,
+            'instructor_id' => $this->instructor->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+            'is_regular' => false,
+            'sessions_remaining' => 5,
+        ]);
+
+        $this->assertSame(0, StudentSchedule::where('student_id', $trial->id)->count());
+
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.classes.attendance'), [
+                'student_id' => $trial->id,
+                'date' => $this->friday,
+                'status' => 'postponed',
+                'party' => 'student',
+                'reason' => 'Cannot make it today',
+            ])
+            ->assertSessionHasErrors('rescheduled_date');
+
+        $this->assertSame(0, ClassSession::where('student_id', $trial->id)->count());
+    }
+
+    #[Test]
+    public function a_student_with_no_timetable_can_still_be_postponed_to_a_chosen_date(): void
+    {
+        $trial = User::factory()->student()->create(['name' => 'A102 Manual Makeup']);
+
+        StudentProfile::factory()->create([
+            'user_id' => $trial->id,
+            'instructor_id' => $this->instructor->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+            'is_regular' => false,
+            'sessions_remaining' => 5,
+        ]);
+
+        $makeupDate = CarbonImmutable::parse($this->friday)->addWeek()->toDateString();
+
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.classes.attendance'), [
+                'student_id' => $trial->id,
+                'date' => $this->friday,
+                'status' => 'postponed',
+                'party' => 'student',
+                'reason' => 'Cannot make it today',
+                'reschedule' => 'manual',
+                'rescheduled_date' => $makeupDate,
+            ])
+            ->assertSessionHasNoErrors();
+
+        $session = ClassSession::where('student_id', $trial->id)->firstOrFail();
+
+        $this->assertSame(SessionStatus::Postponed, $session->status);
+        $this->assertSame($makeupDate, $session->rescheduled_date->toDateString());
+    }
 }

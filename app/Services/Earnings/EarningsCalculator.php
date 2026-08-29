@@ -33,6 +33,15 @@ use Illuminate\Support\Facades\DB;
  *      it entirely. Deductions are NOT gated on a report — an instructor cannot
  *      dodge a deduction by not filing.
  *
+ *      The report is per DAY, not per session. It is matched on
+ *      (instructor, student, paid_date), and `session_reports_class_unique`
+ *      holds those three columns, so a day can carry exactly one report per
+ *      student however many classes it holds. On the rare day that holds two
+ *      payable sessions — a regular class plus one pulled forward onto it,
+ *      which rule 6 pays twice — the single report covers both, because a
+ *      second one cannot be filed. Both classes were taught; a per-session
+ *      requirement the schema forbids would strand the pay for the second.
+ *
  *   5. Amount = hourly rate for the teaching method * learning_time / 60,
  *      rounded to 2dp. A blank teaching method bills at the audio rate.
  *

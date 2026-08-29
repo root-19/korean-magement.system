@@ -361,4 +361,57 @@ class LateAttendanceTest extends TestCase
             ->assertSee('Approve')
             ->assertSee('Reject');
     }
+
+    // ------------------------------------------- the same rule, the early path
+
+    private function markEarly(string $heldDate): TestResponse
+    {
+        return $this->actingAs($this->instructor)->post(route('instructor.classes.early'), [
+            'student_id' => $this->student->id,
+            'held_date' => $heldDate,
+            'target_date' => CarbonImmutable::parse($this->today)->addWeeks(3)->toDateString(),
+        ]);
+    }
+
+    #[Test]
+    public function an_early_class_cannot_back_date_its_way_past_the_gate(): void
+    {
+        // paid_date is COALESCE(held_date, scheduled_date), so held_date decides
+        // which payslip this lands in. Recording it into a week that has already
+        // been paid is the same payroll edit the direct marking is held back
+        // from — and this endpoint used to allow it, which made the button next
+        // to it a way around the whole evaluation queue.
+        $threeWeeksBack = CarbonImmutable::parse($this->today)->subWeeks(3)->toDateString();
+
+        $this->markEarly($threeWeeksBack)->assertSessionHasErrors('held_date');
+
+        $this->assertSame(0, ClassSession::count());
+    }
+
+    #[Test]
+    public function an_early_class_held_today_is_still_free(): void
+    {
+        $this->markEarly($this->today)->assertSessionHasNoErrors();
+
+        $this->assertSame($this->today, ClassSession::firstOrFail()->paid_date->toDateString());
+    }
+
+    #[Test]
+    public function an_approved_evaluation_reopens_the_early_path_too(): void
+    {
+        // The gate is not a ban on past dates, it is a ban on unapproved ones.
+        AttendanceRequest::create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $this->student->id,
+            'class_date' => $this->yesterday,
+            'reason' => 'Taught it early and forgot to record it.',
+            'status' => AttendanceRequest::APPROVED,
+            'decided_by' => $this->admin->id,
+            'decided_at' => now(),
+        ]);
+
+        $this->markEarly($this->yesterday)->assertSessionHasNoErrors();
+
+        $this->assertSame($this->yesterday, ClassSession::firstOrFail()->paid_date->toDateString());
+    }
 }

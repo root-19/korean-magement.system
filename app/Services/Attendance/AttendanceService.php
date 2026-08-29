@@ -197,6 +197,14 @@ class AttendanceService
     /**
      * Postpone a slot. A postponed class is never paid and does not consume a
      * prepaid session, so any counter movement from a previous marking is undone.
+     *
+     * A makeup date is required. The session keeps its prepaid credit, and
+     * rescheduled_date is the only thing that carries the class onto a later
+     * roster — without one it is owed to the student, owed to the instructor,
+     * and visible to neither. MakeupSchedule returns a null auto date for a
+     * student with no weekly timetable, which is every trial student, and the
+     * postpone modal is the only thing that used to catch it. A form is a plain
+     * POST anyone could replay, so the rule belongs here.
      */
     public function postpone(
         User $instructor,
@@ -207,6 +215,13 @@ class AttendanceService
         ?string $rescheduledDate = null,
         ?string $rescheduledTime = null,
     ): ClassSession {
+        if ($rescheduledDate === null) {
+            throw ValidationException::withMessages([
+                'rescheduled_date' => 'Choose the date this class comes back on. '
+                    .'A postponement with no makeup date would disappear from every roster.',
+            ]);
+        }
+
         return DB::transaction(function () use (
             $instructor, $student, $scheduledDate, $postponedBy, $reason, $rescheduledDate, $rescheduledTime
         ) {

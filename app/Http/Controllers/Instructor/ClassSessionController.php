@@ -155,6 +155,15 @@ class ClassSessionController extends Controller
 
         $student = $this->authorizedStudent($instructor, (int) $data['student_id']);
 
+        // The same gate store() applies, on the date that decides the payslip.
+        // paid_date is COALESCE(held_date, scheduled_date), so an early class
+        // dated into a past week pays into THAT week — a payroll edit, exactly
+        // what the closed-class rule exists to hold back. Without this the
+        // button beside it was a way around the evaluation queue: the direct
+        // marking of a three-week-old date was refused while the same date
+        // entered here went straight through.
+        $this->assertClassIsOpen($instructor, $student, $data['held_date'], field: 'held_date');
+
         $session = $this->attendance->markEarly(
             instructor: $instructor,
             student: $student,
@@ -252,9 +261,17 @@ class ClassSessionController extends Controller
      * edit. Today is open; an earlier date needs an approved AttendanceRequest
      * for that exact class. The button is hidden in the roster too, but this is
      * the check that counts — the form is a plain POST anyone could replay.
+     *
+     * Both ways of recording a class come through here, on the date that lands
+     * in the payslip: the marked date for store(), the HELD date for
+     * storeEarly(). $field names the input the message belongs beside.
      */
-    private function assertClassIsOpen(User $instructor, User $student, string $date): void
-    {
+    private function assertClassIsOpen(
+        User $instructor,
+        User $student,
+        string $date,
+        string $field = 'date',
+    ): void {
         $request = AttendanceRequest::query()
             ->where('instructor_id', $instructor->id)
             ->where('student_id', $student->id)
@@ -268,7 +285,7 @@ class ClassSessionController extends Controller
         $when = CarbonImmutable::parse($date);
 
         throw ValidationException::withMessages([
-            'date' => $when->isFuture()
+            $field => $when->isFuture()
                 ? 'That class has not happened yet.'
                 : sprintf(
                     'The %s class for %s is closed. Send it for evaluation and an admin can reopen it.',

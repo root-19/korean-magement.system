@@ -60,15 +60,21 @@
                     <div class="grid gap-4 sm:grid-cols-2">
                         <div>
                             <label for="early-held" class="form-label">Taught on</label>
+                            {{-- `min` as well as `max`: paid_date follows this
+                                 field, so a date in an earlier week pays into
+                                 that week. The endpoint refuses a closed date
+                                 outright; this keeps the picker from offering
+                                 one in the first place. --}}
                             <input id="early-held"
                                    name="held_date"
                                    type="date"
                                    value="{{ $date->toDateString() }}"
+                                   min="{{ $date->toDateString() }}"
                                    max="{{ now()->toDateString() }}"
                                    required
                                    class="form-input numeric">
                             <p class="mt-1.5 text-xs text-gray-500">
-                                Paid in this week.
+                                Paid in the week this date falls in.
                             </p>
                         </div>
 

@@ -213,6 +213,11 @@ class DashboardController extends Controller
             ->where('sp.instructor_id', $instructorId)
             ->where('sp.enrollment_status', EnrollmentStatus::Approved->value)
             ->where('users.is_active', true)
+            // A raw builder gets no soft-delete scope, and is_active is not a
+            // proxy for it — two archived students are still flagged active, so
+            // without this they put upcoming dots on days DayRoster, which goes
+            // through the model, renders empty.
+            ->whereNull('users.deleted_at')
             // Follows withoutFinishedStudents: a used-up student is off the
             // roster, so their slot must not put an upcoming dot on a future day
             // that renders empty.
