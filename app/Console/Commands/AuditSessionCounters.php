@@ -36,6 +36,12 @@ use Illuminate\Support\Str;
  *   `sessions_purchased` and `sessions_deducted` as they were at enrolment:
  *
  *       expected_remaining = purchased - deducted - (present + student-absent)
+ *                                                    + teacher-absent
+ *
+ * The last term is the make-good class the school adds when a teacher does not
+ * turn up (AttendanceService::creditsSession). It is added back here for the
+ * same reason student-absent is subtracted: without it every student whose
+ * teacher has missed a class reads as over-credited by exactly that many.
  *
  * A student is therefore only reported as verifiable when that anchor exists and
  * still applies. Two things retire it, and both are listed separately by
@@ -138,7 +144,7 @@ class AuditSessionCounters extends Command
     }
 
     /**
-     * Present and student-absent counts per student, in one pass.
+     * Present, student-absent and teacher-absent counts per student, in one pass.
      *
      * Not scoped to an instructor: the counters belong to the student, so a class
      * taught by whoever had them before still spent one of their sessions.
@@ -156,12 +162,17 @@ class AuditSessionCounters extends Command
                 'SUM(status = ? AND absent_by = ?) as student_absent',
                 [SessionStatus::Absent->value, Party::Student->value],
             )
+            ->selectRaw(
+                'SUM(status = ? AND absent_by = ?) as teacher_absent',
+                [SessionStatus::Absent->value, Party::Teacher->value],
+            )
             ->groupBy('student_id')
             ->get()
             ->map(function (object $row) {
                 $row->student_id = (int) $row->student_id;
                 $row->present = (int) $row->present;
                 $row->student_absent = (int) $row->student_absent;
+                $row->teacher_absent = (int) $row->teacher_absent;
 
                 return $row;
             })
@@ -232,6 +243,7 @@ class AuditSessionCounters extends Command
     {
         $present = (int) ($history->present ?? 0);
         $studentAbsent = (int) ($history->student_absent ?? 0);
+        $teacherAbsent = (int) ($history->teacher_absent ?? 0);
         $consumed = $present + $studentAbsent;
 
         $attended = (int) $profile->sessions_attended;
@@ -244,6 +256,7 @@ class AuditSessionCounters extends Command
             'student_id' => $profile->user_id,
             'present' => $present,
             'student_absent' => $studentAbsent,
+            'teacher_absent' => $teacherAbsent,
             'attended' => $attended,
             'attended_expected' => $present,
             'attended_delta' => $present - $attended,
@@ -274,7 +287,7 @@ class AuditSessionCounters extends Command
             return $row;
         }
 
-        $expected = $anchor['purchased'] - $anchor['deducted'] - $consumed;
+        $expected = $anchor['purchased'] - $anchor['deducted'] - $consumed + $teacherAbsent;
 
         $row['remaining_expected'] = $expected;
         $row['remaining_delta'] = $expected - $remaining;
@@ -428,7 +441,7 @@ class AuditSessionCounters extends Command
 
         fputcsv($handle, [
             'instructor', 'student', 'student_id',
-            'present_rows', 'student_absent_rows',
+            'present_rows', 'student_absent_rows', 'teacher_absent_rows',
             'attended', 'attended_expected', 'attended_delta',
             'remaining', 'remaining_expected', 'remaining_delta',
             'basis',
@@ -437,7 +450,7 @@ class AuditSessionCounters extends Command
         foreach ($rows as $row) {
             fputcsv($handle, [
                 $row['instructor'], $row['student'], $row['student_id'],
-                $row['present'], $row['student_absent'],
+                $row['present'], $row['student_absent'], $row['teacher_absent'],
                 $row['attended'], $row['attended_expected'], $row['attended_delta'],
                 $row['remaining'], $row['remaining_expected'] ?? '', $row['remaining_delta'] ?? '',
                 $row['basis'],

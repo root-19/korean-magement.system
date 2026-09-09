@@ -49,8 +49,8 @@ class AppServiceProvider extends ServiceProvider
 
     private function registerBladeDirectives(): void
     {
-        // @money(79.17) => "₱79", @money2(79.17) => "₱79.17". Both delegate to the
-        // helpers in app/Support/money.php, which is also what component
+        // @money(79.17) and @money2(79.17) both => "₱79.17". Both delegate to
+        // the helpers in app/Support/money.php, which is also what component
         // attributes must use — a directive inside `value="…"` is never compiled.
         Blade::directive('money', function (string $expression) {
             return "<?php echo money({$expression}); ?>";

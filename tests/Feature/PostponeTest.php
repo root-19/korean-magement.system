@@ -516,6 +516,48 @@ class PostponeTest extends TestCase
     }
 
     #[Test]
+    public function two_makeups_on_one_day_only_hold_back_one_slot(): void
+    {
+        // Reported from production: a student on a three-day timetable with three
+        // classes left had all three postponed, and MakeupSchedule — which
+        // returns the plan's new LAST class — resolved two of them to the same
+        // date. A day holds one slot per student, so those two can only ever come
+        // back as one class, but the roster counted them as two dates spoken for,
+        // read the balance as fully booked, and cancelled the timetable slot in
+        // between. The instructor watched a real, payable class vanish off her
+        // dashboard.
+        StudentProfile::firstOrFail()->update(['sessions_remaining' => 2]);
+
+        foreach (['2026-08-05', $this->friday] as $postponed) {
+            ClassSession::create([
+                'instructor_id' => $this->instructor->id,
+                'student_id' => $this->student->id,
+                'scheduled_date' => $postponed,
+                'status' => SessionStatus::Postponed,
+                'postponed_by' => Party::Teacher,
+                'rescheduled_date' => '2026-08-19',
+                'marked_by' => $this->instructor->id,
+                'marked_at' => now(),
+            ]);
+        }
+
+        // The calendar first, while Monday is still upcoming: two classes left
+        // against ONE day owed leaves a session free to spend on the timetable.
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertSee('Monday, August 10 — 1 class scheduled');
+
+        $this->moveClockTo('2026-08-10');
+
+        // And the roster that dot leads to has to agree with it.
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.classes.index', ['date' => '2026-08-10']))
+            ->assertOk()
+            ->assertSee('1 student scheduled');
+    }
+
+    #[Test]
     public function the_calendar_stops_projecting_the_slots_the_makeup_emptied(): void
     {
         // The projection has to agree with the roster: a dot on Monday leads to a

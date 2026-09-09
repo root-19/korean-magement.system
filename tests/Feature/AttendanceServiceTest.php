@@ -83,9 +83,12 @@ class AttendanceServiceTest extends TestCase
     }
 
     #[Test]
-    public function a_teacher_absence_does_not_consume_the_students_session(): void
+    public function a_teacher_absence_adds_a_session_to_the_students_plan(): void
     {
-        // Not the student's fault, so they keep the credit.
+        // Not the student's fault, so they keep the credit AND get a class back:
+        // the school makes good on a lesson the teacher did not turn up for.
+        // Legacy did this with `semester = semester + 1` in both instructor
+        // views; the rewrite dropped it and the extra class stopped arriving.
         $this->service->mark(
             $this->instructor,
             $this->student,
@@ -93,6 +96,76 @@ class AttendanceServiceTest extends TestCase
             SessionStatus::Absent,
             Party::Teacher,
         );
+
+        $this->assertSame(['attended' => 0, 'remaining' => 11], $this->counters());
+    }
+
+    #[Test]
+    public function a_teacher_postponement_is_not_credited(): void
+    {
+        // The class already has a date to come back on, so crediting it as well
+        // would pay the student twice for one missed lesson. Legacy credited
+        // only the absence, never the postponement.
+        $this->service->postpone(
+            $this->instructor,
+            $this->student,
+            '2025-08-04',
+            Party::Teacher,
+            rescheduledDate: '2025-08-11',
+        );
+
+        $this->assertSame(['attended' => 0, 'remaining' => 10], $this->counters());
+    }
+
+    #[Test]
+    public function re_marking_a_teacher_absence_credits_only_once(): void
+    {
+        // The delta, not a blind increment: saving the same absence three times
+        // must not hand out three classes.
+        foreach (range(1, 3) as $ignored) {
+            $this->service->mark(
+                $this->instructor,
+                $this->student,
+                '2025-08-04',
+                SessionStatus::Absent,
+                Party::Teacher,
+            );
+        }
+
+        $this->assertSame(['attended' => 0, 'remaining' => 11], $this->counters());
+    }
+
+    #[Test]
+    public function correcting_a_teacher_absence_to_present_takes_the_extra_class_back(): void
+    {
+        // The teacher did turn up after all, so the make-good class goes away
+        // and the session is spent: 10 -> 11 on the credit, then -2 to land on 9.
+        $this->service->mark(
+            $this->instructor,
+            $this->student,
+            '2025-08-04',
+            SessionStatus::Absent,
+            Party::Teacher,
+        );
+        $this->assertSame(['attended' => 0, 'remaining' => 11], $this->counters());
+
+        $this->service->mark($this->instructor, $this->student, '2025-08-04', SessionStatus::Present);
+
+        $this->assertSame(['attended' => 1, 'remaining' => 9], $this->counters());
+    }
+
+    #[Test]
+    public function clearing_a_teacher_absence_takes_the_extra_class_back(): void
+    {
+        $session = $this->service->mark(
+            $this->instructor,
+            $this->student,
+            '2025-08-04',
+            SessionStatus::Absent,
+            Party::Teacher,
+        );
+
+        $this->service->unmark($this->instructor, $session);
 
         $this->assertSame(['attended' => 0, 'remaining' => 10], $this->counters());
     }
@@ -124,7 +197,7 @@ class AttendanceServiceTest extends TestCase
     }
 
     #[Test]
-    public function correcting_present_to_teacher_absent_returns_the_session(): void
+    public function correcting_present_to_teacher_absent_returns_the_session_and_credits_one(): void
     {
         $this->service->mark($this->instructor, $this->student, '2025-08-04', SessionStatus::Present);
         $this->assertSame(['attended' => 1, 'remaining' => 9], $this->counters());
@@ -137,7 +210,8 @@ class AttendanceServiceTest extends TestCase
             Party::Teacher,
         );
 
-        $this->assertSame(['attended' => 0, 'remaining' => 10], $this->counters());
+        // The spent session comes back and the make-good class is added on top.
+        $this->assertSame(['attended' => 0, 'remaining' => 11], $this->counters());
     }
 
     #[Test]
@@ -183,7 +257,8 @@ class AttendanceServiceTest extends TestCase
     public function correcting_student_absent_to_teacher_absent_returns_the_session(): void
     {
         // It was the teacher who missed it, so the credit goes back — the same
-        // lost absent_by left the student short instead.
+        // lost absent_by left the student short instead — and the make-good
+        // class is added, putting them one above where they started.
         $this->service->mark(
             $this->instructor,
             $this->student,
@@ -200,7 +275,7 @@ class AttendanceServiceTest extends TestCase
             Party::Teacher,
         );
 
-        $this->assertSame(['attended' => 0, 'remaining' => 10], $this->counters());
+        $this->assertSame(['attended' => 0, 'remaining' => 11], $this->counters());
     }
 
     #[Test]

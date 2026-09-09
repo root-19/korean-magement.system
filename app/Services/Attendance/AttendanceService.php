@@ -308,8 +308,10 @@ class AttendanceService
      * Move the student's prepaid counters to match a status change.
      *
      * A session is CONSUMED when it is present or the student was absent — both
-     * burn a prepaid class. Teacher-absent and postponed do not: the student
-     * keeps the credit.
+     * burn a prepaid class. Postponed does not: the class is coming back on the
+     * makeup date, so the student keeps the credit and nothing moves.
+     *
+     * Teacher-absent goes further and GRANTS a session — see creditsSession.
      *
      * Expressed as a delta between the old and new state so re-marking a slot
      * (present -> absent, absent -> postponed, ...) stays correct instead of
@@ -331,13 +333,17 @@ class AttendanceService
         $wasConsumed = $this->consumesSession($from, $fromAbsentBy);
         $isConsumed = $this->consumesSession($to, $toAbsentBy);
 
+        $wasCredited = $this->creditsSession($from, $fromAbsentBy);
+        $isCredited = $this->creditsSession($to, $toAbsentBy);
+
         $wasPresent = $from === SessionStatus::Present;
         $isPresent = $to === SessionStatus::Present;
 
         $consumedDelta = ($isConsumed ? 1 : 0) - ($wasConsumed ? 1 : 0);
+        $creditDelta = ($isCredited ? 1 : 0) - ($wasCredited ? 1 : 0);
         $attendedDelta = ($isPresent ? 1 : 0) - ($wasPresent ? 1 : 0);
 
-        if ($consumedDelta === 0 && $attendedDelta === 0) {
+        if ($consumedDelta === 0 && $creditDelta === 0 && $attendedDelta === 0) {
             return;
         }
 
@@ -345,7 +351,7 @@ class AttendanceService
         // are denormalised and some legacy rows are already inconsistent, so a
         // correction must never drive one negative.
         $profile->sessions_attended = max(0, $profile->sessions_attended + $attendedDelta);
-        $profile->sessions_remaining = max(0, $profile->sessions_remaining - $consumedDelta);
+        $profile->sessions_remaining = max(0, $profile->sessions_remaining - $consumedDelta + $creditDelta);
         $profile->save();
     }
 
@@ -356,6 +362,29 @@ class AttendanceService
     {
         return $status === SessionStatus::Present
             || ($status === SessionStatus::Absent && $absentBy === Party::Student);
+    }
+
+    /**
+     * Whether a status hands the student an EXTRA session.
+     *
+     * Only one does: the teacher did not turn up. The student loses nothing
+     * either way — an unheld class consumes no prepaid session — but the school
+     * makes good on a missed class by adding one to the plan, so a student the
+     * teacher stood up once ends up with 13 classes against a 12-class purchase.
+     *
+     * This is the legacy rule, restored. `semester = semester + 1` on
+     * absent-by-teacher was written in both instructor views
+     * (app/views/instructor/classes.php), and the rewrite dropped it: teachers
+     * marking themselves absent watched the extra class never arrive.
+     *
+     * Postponed-by-teacher is deliberately NOT credited, and legacy did not
+     * credit it either. A postponement already carries the class forward to a
+     * makeup date; crediting it as well would pay the student twice for one
+     * missed lesson.
+     */
+    protected function creditsSession(?SessionStatus $status, ?Party $absentBy): bool
+    {
+        return $status === SessionStatus::Absent && $absentBy === Party::Teacher;
     }
 
     protected function lockedProfile(User $student): ?StudentProfile

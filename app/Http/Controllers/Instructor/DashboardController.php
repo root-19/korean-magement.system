@@ -191,16 +191,7 @@ class DashboardController extends Controller
      */
     private function timetabledStudentsByWeekday(int $instructorId): array
     {
-        // Follows DayRoster::withoutFullyBookedStudents: a session already
-        // promised to a makeup is not free to be taught on a timetable slot, so
-        // a student whose whole balance is spoken for projects no classes.
-        $owed = ClassSession::query()
-            ->where('instructor_id', $instructorId)
-            ->makeupOwedAfter(CarbonImmutable::today()->toDateString())
-            ->pluck('student_id')
-            ->countBy(fn ($id) => (int) $id);
-
-        return DB::table('student_schedules as ss')
+        $slots = DB::table('student_schedules as ss')
             ->join('student_profiles as sp', 'sp.user_id', '=', 'ss.student_id')
             ->join('users', 'users.id', '=', 'ss.student_id')
             ->select(
@@ -223,7 +214,18 @@ class DashboardController extends Controller
             // that renders empty.
             ->where('sp.sessions_remaining', '>', 0)
             ->distinct()
-            ->get()
+            ->get();
+
+        // The roster's own rule, not a second copy of it: the calendar's
+        // upcoming dots and the roster underneath them disagreeing is worse
+        // than either being wrong on its own.
+        $owed = DayRoster::makeupDaysOwed(
+            $instructorId,
+            $slots->pluck('student_id')->map(fn ($id) => (int) $id)->unique()->all(),
+            CarbonImmutable::today()->toDateString(),
+        );
+
+        return $slots
             ->reject(function ($row) use ($owed) {
                 $promised = (int) $owed->get((int) $row->student_id, 0);
 

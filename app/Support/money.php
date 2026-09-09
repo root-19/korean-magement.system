@@ -18,22 +18,33 @@ const MONEY_SYMBOL = '₱';
 
 if (! function_exists('money')) {
     /**
-     * "₱79" — totals are shown whole while the stored decimals stay exact, so a
-     * payslip reads as round figures without any rounding being persisted.
+     * "₱47.50" — every peso figure is shown to the centavo.
+     *
+     * Totals used to be printed whole while the lines above them kept their
+     * decimals, so a payslip holding one 15-minute audio class listed the class
+     * at ₱47.50 and the net payable at ₱48. Nothing was ever rounded in the
+     * database — gross/deductions/net are stored to two places — but a teacher
+     * reading a total 50 centavos above the only line on the page has no way to
+     * know that, and asked for the rounding to stop.
+     *
+     * Rates read "₱190.00/hr" for the same reason: one format for money means
+     * no column can be read against another and come out short.
      */
     function money(float|int|string|null $amount): string
     {
-        return MONEY_SYMBOL.number_format((float) $amount);
+        return MONEY_SYMBOL.number_format((float) $amount, 2);
     }
 }
 
 if (! function_exists('money2')) {
     /**
-     * "₱79.17" for the places a per-session rate is shown and the fractional
-     * part is the point.
+     * Kept for the call sites that spell out that the fractional part matters —
+     * a per-session rate, an earnings line. Identical to money(), and delegating
+     * rather than repeating the format is what stops the two drifting apart
+     * again.
      */
     function money2(float|int|string|null $amount): string
     {
-        return MONEY_SYMBOL.number_format((float) $amount, 2);
+        return money($amount);
     }
 }

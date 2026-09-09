@@ -105,14 +105,20 @@ class StudentProfile extends Model
     }
 
     /**
-     * Total prepaid sessions on the student's plan.
+     * Total sessions on the student's plan.
      *
      * The identity the feedback page renders:
      *
-     *   purchased = attended + student-absent + remaining + deducted
+     *   total = attended + student-absent + remaining + deducted
      *
      * A student-absent class consumes a prepaid session but counts as neither
      * attended nor remaining, so it has to be added back in explicitly.
+     *
+     * The total can exceed what the student actually paid for, and that is not a
+     * fault: a class the teacher missed adds one to `sessions_remaining` — see
+     * AttendanceService::creditsSession — so a 12-class purchase reads as 13
+     * once the teacher has been absent once. The extra class is real, and the
+     * figure is what the student is owed rather than what they bought.
      */
     public function sessionsPurchased(?int $studentAbsentCount = null): int
     {

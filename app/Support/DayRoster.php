@@ -28,8 +28,9 @@ use Illuminate\Support\Facades\DB;
  * Group 1 is trimmed at both ends. A slot outside the student's enrolment dates
  * is not a class because they were not a student yet — see EnrollmentWindow. A
  * slot they have no session left to spend on is not a class either, because a
- * postponement moved that session to the makeup date — see
- * withoutFullyBookedStudents.
+ * postponement moved that session to a makeup date the timetable does not cover
+ * — see withoutFullyBookedStudents, and read it before touching it: trimming one
+ * slot too many silently cancels a class that was taught and owed.
  *
  * Group 3 is the one that keeps going missing. A makeup lands on whatever day
  * the student can come back, very often a weekday they have no slot on at all,
@@ -142,11 +143,50 @@ final class DayRoster
             $instructorId,
         );
 
-        $rows = self::withoutFullyBookedStudents($rows, $instructorId, $date);
+        $rows = self::withoutFullyBookedStudents(
+            $rows,
+            self::makeupDaysOwed($instructorId, $rows->keys()->all(), $dateString),
+        );
 
         return self::withReportsAndRequests($rows, $instructorId, $dateString)
             ->sortBy(fn (array $row) => [$row['time'] === null, $row['time'], $row['student']->name])
             ->values();
+    }
+
+    /**
+     * How many separate DAYS after $after each student already owes a makeup on.
+     *
+     * Days, not postponed rows: a balance is spent on days, because a day holds
+     * one slot per student. See withoutFullyBookedStudents, which is the whole
+     * reason this is not a COUNT(*).
+     *
+     * Public because the dashboard calendar has to answer the same question to
+     * decide which days get an upcoming dot. It had its own copy, and the two
+     * drifting apart is how a dot comes to lead to a day that renders empty.
+     *
+     * @param  array<int, int>  $studentIds
+     * @return Collection<int, int>
+     */
+    public static function makeupDaysOwed(int $instructorId, array $studentIds, string $after): Collection
+    {
+        if ($studentIds === []) {
+            return collect();
+        }
+
+        return ClassSession::query()
+            ->where('instructor_id', $instructorId)
+            ->whereIn('student_id', $studentIds)
+            ->makeupOwedAfter($after)
+            ->get(['student_id', 'scheduled_date', 'rescheduled_date'])
+            ->groupBy(fn (ClassSession $session) => (int) $session->student_id)
+            ->map(fn (Collection $sessions) => $sessions
+                // The current shape points forward from the postponed row; the
+                // legacy shape IS the row, sitting on the day it lands. See
+                // ClassSession::MAKEUP_MARKER.
+                ->map(fn (ClassSession $session) => ($session->rescheduled_date ?? $session->scheduled_date)
+                    ->toDateString())
+                ->unique()
+                ->count());
     }
 
     /**
@@ -196,10 +236,27 @@ final class DayRoster
      * A postponement does not use up a prepaid session, it MOVES one: the class
      * is now owed on the makeup date. The weekly timetable knows nothing about
      * that and goes on projecting the student onto every slot in between, so a
-     * student with one class left, moved to the 29th, was listed as a class to
+     * student with one class left, moved to a Saturday, was listed as a class to
      * teach on each of their usual days first — with Present and Absent buttons
      * on a class nobody was coming to, and marking one would have burned the
      * session the makeup is waiting for.
+     *
+     * What is promised is counted in DATES, not in postponed rows, and that is
+     * the whole of the fix for classes going missing. A day holds one slot per
+     * student (class_sessions_slot_unique), so two postponements aimed at one
+     * date can only ever come back as one class — and two of them legitimately
+     * do aim at one date. MakeupSchedule's auto date is the plan's new LAST
+     * class, so two classes postponed a fortnight apart, with a class taught in
+     * between, both correctly resolve to the same end date.
+     *
+     * Counting those as two reservations against the balance took a session away
+     * twice. A Mon/Wed/Fri student with three classes left and three teacher
+     * postponements — two of them auto-resolved to the same day — was read as
+     * having three dates spoken for against a balance of three, and so was
+     * dropped from every plain timetable day up to the last of them. Only two
+     * classes could ever be taught on those two dates; the third was owed on the
+     * timetable, and the roster had just cancelled it. The instructor lost a
+     * real, payable class off her dashboard with nothing to say where it went.
      *
      * Only bare timetable rows go. A row backed by a session, or one that is
      * itself the makeup, is a record of something and stays whatever the count
@@ -207,13 +264,11 @@ final class DayRoster
      * 24-hour grace in withoutFinishedStudents is left alone.
      *
      * @param  Collection<array-key, array<string, mixed>>  $rows
+     * @param  Collection<int, int>  $owed  makeup DAYS per student
      * @return Collection<array-key, array<string, mixed>>
      */
-    private static function withoutFullyBookedStudents(
-        Collection $rows,
-        int $instructorId,
-        CarbonImmutable $date,
-    ): Collection {
+    private static function withoutFullyBookedStudents(Collection $rows, Collection $owed): Collection
+    {
         $projected = $rows->filter(
             fn (array $row) => $row['session'] === null && $row['makeup_for'] === null
         );
@@ -221,13 +276,6 @@ final class DayRoster
         if ($projected->isEmpty()) {
             return $rows;
         }
-
-        $owed = ClassSession::query()
-            ->where('instructor_id', $instructorId)
-            ->whereIn('student_id', $projected->keys())
-            ->makeupOwedAfter($date->toDateString())
-            ->pluck('student_id')
-            ->countBy(fn ($id) => (int) $id);
 
         return $rows->reject(function (array $row, int $studentId) use ($projected, $owed) {
             $promised = (int) $owed->get($studentId, 0);

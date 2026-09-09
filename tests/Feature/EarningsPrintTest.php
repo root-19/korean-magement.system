@@ -103,12 +103,37 @@ class EarningsPrintTest extends TestCase
     {
         $html = $this->payslip();
 
-        // 190/h audio × 25 minutes = 79.17, shown whole.
-        $this->assertStringContainsString('₱79', $html);
+        // 190/h audio × 25 minutes = 79.17, to the centavo.
+        $this->assertStringContainsString('₱79.17', $html);
         $this->assertStringContainsString('Net payable', $html);
 
         // No payout row for this week yet, so the sheet must not read as final.
         $this->assertStringContainsString('Not yet finalised', $html);
+    }
+
+    #[Test]
+    public function the_total_is_not_rounded_past_the_line_it_sums(): void
+    {
+        // Reported by an instructor: her only class that week was 15 minutes of
+        // audio, listed at ₱47.50, and the net payable underneath it read ₱48.
+        // Nothing was ever rounded in the database — gross, deductions and net
+        // are all stored to two places — but the totals were formatted whole, so
+        // the sheet contradicted itself and she asked for the rounding to stop.
+        StudentProfile::firstOrFail()->update(['learning_time' => 15]);
+
+        $html = $this->payslip();
+
+        // 190/h × 15 minutes = 47.50, on the line AND in the total.
+        $this->assertSame(
+            0,
+            substr_count($html, '₱48'),
+            'no figure on the payslip may round 47.50 up to a whole peso',
+        );
+        $this->assertGreaterThanOrEqual(
+            2,
+            substr_count($html, '₱47.50'),
+            'the class line and the net payable must both read ₱47.50',
+        );
     }
 
     #[Test]
