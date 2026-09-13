@@ -58,6 +58,19 @@ class StudentSchedule extends Model
         return substr($this->dayName(), 0, 3);
     }
 
+    /**
+     * The one- or two-letter form the copied report signs off with: "M/W/F",
+     * "T/Th", "Sa/Su".
+     *
+     * Thursday, Saturday and Sunday keep a second letter. A single initial each
+     * would read as Tuesday and Monday-ish noise, and the timetable is the line
+     * the student checks before turning up.
+     */
+    public function dayInitial(): string
+    {
+        return [1 => 'M', 2 => 'T', 3 => 'W', 4 => 'Th', 5 => 'F', 6 => 'Sa', 7 => 'Su'][$this->day_of_week] ?? '-';
+    }
+
     /** "18:30:00" stored, "6:30 PM" shown. */
     public function formattedTime(): string
     {

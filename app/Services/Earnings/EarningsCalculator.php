@@ -48,6 +48,18 @@ use Illuminate\Support\Facades\DB;
  *   6. Everything keys off `paid_date`, not `scheduled_date`, so a class taught
  *      early is paid in the week the work was done.
  *
+ *   7. A TRIAL student (`student_profiles.is_regular` = false) earns the
+ *      instructor nothing: their sessions neither pay nor deduct, whatever the
+ *      status. A trial is the school's free sample, so there is no fee to share
+ *      — and nothing to dock either, which is why a teacher-absent trial is
+ *      dropped rather than turned into a deduction.
+ *
+ *      Applied from `academy.trial_unpaid_from` onwards. Legacy paid for trials
+ *      like any other class, so everything before that date is left alone: the
+ *      cutover is what keeps finalised payouts and legacy:verify-earnings
+ *      intact. A session with no profile row at all is not a trial — it is
+ *      corrupt data — and keeps its old treatment.
+ *
  * WHAT IS GONE
  * ------------
  * The legacy query carried two pieces of machinery that the new schema retires:
@@ -120,6 +132,7 @@ class EarningsCalculator
     {
         $requiredFrom = $this->feedbackRequiredFrom();
         $isExempt = $this->isFeedbackExempt($instructorId);
+        $trialUnpaidFrom = $this->trialUnpaidFrom();
 
         return ClassSession::query()
             ->select([
@@ -157,6 +170,14 @@ class EarningsCalculator
                             ->whereIn('class_sessions.absent_by', [Party::Student->value, Party::Teacher->value]);
                     });
             })
+
+            // Rule 7. Trial students are off the payroll from the cutover on.
+            ->when($trialUnpaidFrom !== null, fn ($query) => $query->where(function ($q) use ($trialUnpaidFrom) {
+                $q->where('class_sessions.paid_date', '<', $trialUnpaidFrom)
+                    ->orWhere('profiles.is_regular', true)
+                    // NULL means no profile row, not a trial enrolment.
+                    ->orWhereNull('profiles.is_regular');
+            }))
 
             // Rule 4. Skipped wholesale for an exempt instructor: every settled
             // session of theirs pays whether or not a report exists.
@@ -255,6 +276,16 @@ class EarningsCalculator
     protected function feedbackRequiredFrom(): string
     {
         return (string) config('academy.feedback_required_from', '2024-01-01');
+    }
+
+    /**
+     * The date trial classes stopped earning, or null when the rule is off.
+     */
+    protected function trialUnpaidFrom(): ?string
+    {
+        $from = trim((string) config('academy.trial_unpaid_from', ''));
+
+        return $from === '' ? null : $from;
     }
 
     protected function isFeedbackExempt(int $instructorId): bool

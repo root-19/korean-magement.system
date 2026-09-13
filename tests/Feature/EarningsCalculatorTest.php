@@ -66,6 +66,26 @@ class EarningsCalculatorTest extends TestCase
     }
 
     /**
+     * A trial student: same enrolment, without the fixed weekly plan. This is
+     * the "Trial" tag the class list shows, and from the cutover it is what
+     * takes the student off the payroll.
+     */
+    private function trialStudent(TeachingMethod $method = TeachingMethod::Audio, int $minutes = 25): User
+    {
+        $student = User::factory()->student()->create();
+
+        StudentProfile::factory()
+            ->method($method, $minutes)
+            ->create([
+                'user_id' => $student->id,
+                'instructor_id' => $this->instructor->id,
+                'is_regular' => false,
+            ]);
+
+        return $student;
+    }
+
+    /**
      * A session plus the report that unlocks its payment.
      */
     private function reportedSession(User $student, string $date, string $state = 'present'): ClassSession
@@ -482,5 +502,88 @@ class EarningsCalculatorTest extends TestCase
         $this->assertSame(2, $row['absent'], 'student-absent and teacher-absent are both absences');
         $this->assertSame(79.17, $row['amount'], 'two payable minus one deducted');
         $this->assertSame(79.17, $summary->net());
+    }
+
+    // ------------------------------------------------------------------ trials
+
+    #[Test]
+    public function a_trial_students_class_does_not_pay(): void
+    {
+        // The school's free sample: there is no fee to share with the teacher.
+        config()->set('academy.trial_unpaid_from', '2025-08-05');
+
+        $this->reportedSession($this->trialStudent(), '2025-08-06');
+
+        $summary = $this->calculator->forWindow($this->instructor->id, $this->window());
+
+        $this->assertTrue($summary->isEmpty());
+        $this->assertSame(0.0, $summary->gross());
+        $this->assertSame(0.0, $summary->net());
+    }
+
+    #[Test]
+    public function a_trial_student_absence_does_not_pay_either(): void
+    {
+        // A regular student who does not turn up still pays the instructor for
+        // showing up and waiting. A trial has nothing to pay with.
+        config()->set('academy.trial_unpaid_from', '2025-08-05');
+
+        $this->reportedSession($this->trialStudent(), '2025-08-06', 'studentAbsent');
+
+        $this->assertSame(0.0, $this->calculator->forWindow($this->instructor->id, $this->window())->gross());
+    }
+
+    #[Test]
+    public function a_teacher_absence_on_a_trial_class_is_not_deducted(): void
+    {
+        // Nothing was earned, so there is nothing to dock. Docking here would
+        // charge the instructor for a class that was never going to pay.
+        config()->set('academy.trial_unpaid_from', '2025-08-05');
+
+        ClassSession::factory()->teacherAbsent()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $this->trialStudent()->id,
+            'scheduled_date' => '2025-08-06',
+        ]);
+
+        $summary = $this->calculator->forWindow($this->instructor->id, $this->window());
+
+        $this->assertSame(0.0, $summary->deductions());
+        $this->assertSame(0, $summary->sessionsDeducted());
+        $this->assertSame(0.0, $summary->net());
+    }
+
+    #[Test]
+    public function a_trial_class_before_the_cutover_is_still_paid(): void
+    {
+        // Legacy paid for trials like any other class. Restating those weeks
+        // would move money that has already been paid out.
+        config()->set('academy.trial_unpaid_from', '2025-08-05');
+
+        $this->reportedSession($this->trialStudent(), '2025-08-04');
+
+        $this->assertSame(79.17, $this->calculator->forWindow($this->instructor->id, $this->window())->gross());
+    }
+
+    #[Test]
+    public function a_regular_student_is_untouched_by_the_trial_rule(): void
+    {
+        config()->set('academy.trial_unpaid_from', '2025-08-05');
+
+        $this->reportedSession($this->student(), '2025-08-06');
+
+        $this->assertSame(79.17, $this->calculator->forWindow($this->instructor->id, $this->window())->gross());
+    }
+
+    #[Test]
+    public function trials_are_paid_when_the_rule_is_switched_off(): void
+    {
+        // An empty cutover date turns the rule off wholesale, which is the
+        // setting every week before the school introduced it ran under.
+        config()->set('academy.trial_unpaid_from', '');
+
+        $this->reportedSession($this->trialStudent(), '2025-08-06');
+
+        $this->assertSame(79.17, $this->calculator->forWindow($this->instructor->id, $this->window())->gross());
     }
 }

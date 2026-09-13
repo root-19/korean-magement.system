@@ -91,6 +91,9 @@
                                     ]) }}"
                                    class="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-warning-500/30 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-warning-400 transition hover:border-warning-500/60 hover:bg-gray-700">
                                     {{ $session->student->name }}
+                                    @if ($session->student?->studentProfile && ! $session->student->studentProfile->is_regular)
+                                        <span class="badge-warning shrink-0">Trial</span>
+                                    @endif
                                     <span class="numeric text-warning-400/60">{{ $session->paid_date->format('M j') }}</span>
                                 </a>
                             </li>
@@ -102,6 +105,14 @@
                             </li>
                         @endif
                     </ul>
+
+                    {{-- Said only when it applies: the sentence above promises
+                         payment, and for a trial there is none to promise. --}}
+                    @if ($unreported->contains(fn ($s) => $s->student?->studentProfile && ! $s->student->studentProfile->is_regular))
+                        <p class="mt-2 text-xs text-warning-400/70">
+                            Trial classes still owe the student their report, but they do not pay.
+                        </p>
+                    @endif
                 </div>
             </div>
         </div>

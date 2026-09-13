@@ -38,6 +38,26 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Trial classes
+    |--------------------------------------------------------------------------
+    |
+    | A trial student — student_profiles.is_regular = false, the "Trial" tag on
+    | the class list — earns the instructor nothing. Their sessions neither pay
+    | nor deduct: a class that was never paid for cannot be docked either.
+    |
+    | Sessions taught strictly BEFORE this date predate the rule and settle the
+    | old way, which is what keeps finalised payouts, and the legacy comparison
+    | in legacy:verify-earnings, intact. Leave it empty to switch the rule off.
+    |
+    | The default is a Saturday, the day a payout week opens, so the rule never
+    | takes effect halfway through a week an instructor is being paid for.
+    |
+    */
+
+    'trial_unpaid_from' => env('TRIAL_UNPAID_FROM', '2026-09-12'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Feedback-exempt instructors
     |--------------------------------------------------------------------------
     |

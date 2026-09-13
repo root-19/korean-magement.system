@@ -70,6 +70,36 @@ class InstructorDashboardTest extends TestCase
     }
 
     #[Test]
+    public function an_unreported_trial_session_says_it_will_not_pay(): void
+    {
+        // The panel above the list promises payment once the report is filed.
+        // A trial class owes the student their feedback but pays the instructor
+        // nothing, so the panel says so rather than promising money.
+        $trial = User::factory()->student()->create(['name' => 'A901 Trial Student']);
+
+        StudentProfile::factory()->create([
+            'user_id' => $trial->id,
+            'instructor_id' => $this->instructor->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+            'is_regular' => false,
+        ]);
+
+        ClassSession::factory()->present()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $trial->id,
+            'scheduled_date' => now()->toDateString(),
+        ]);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertSee('awaiting a report')
+            ->assertSee('A901 Trial Student')
+            ->assertSee('Trial')
+            ->assertSee('Trial classes still owe the student their report, but they do not pay.');
+    }
+
+    #[Test]
     public function tomorrows_schedule_lists_students_timetabled_tomorrow(): void
     {
         $this->actingAs($this->instructor)

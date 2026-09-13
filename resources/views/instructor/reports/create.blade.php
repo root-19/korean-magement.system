@@ -19,6 +19,13 @@
             'hint' => "(Please check and correct the student's grammar in this section)",
             'tone' => 'brand',
             'add' => '+ Add Grammar Row',
+            // How the section is written into the copied report, which reads
+            // nothing like the form: numbered corrections, one per row.
+            'copy' => [
+                'title' => '[Grammar Corrections]',
+                'style' => 'numbered',
+                'labels' => ['You say: ', 'Better say: > '],
+            ],
             'fields' => [
                 'yourSentence' => [
                     'label' => 'Your sentence',
@@ -39,6 +46,7 @@
             'hint' => "(Please check and correct the student's pronunciation in this section)",
             'tone' => 'accent',
             'add' => '+ Add Pronunciation Row',
+            'copy' => ['title' => '[Pronunciation]', 'style' => 'bullets'],
             'fields' => [
                 'word' => [
                     'label' => 'Word to practice',
@@ -59,6 +67,7 @@
             'hint' => "(Please check and correct the student's vocabulary in this section)",
             'tone' => 'brand',
             'add' => '+ Add Vocabulary Row',
+            'copy' => ['title' => '[Useful Vocabulary]', 'style' => 'bullets'],
             'fields' => [
                 'vocab' => [
                     'label' => 'New vocabulary / expression',
@@ -80,18 +89,29 @@
     // input first (so a failed validation keeps what was typed), then the saved
     // report, then one blank row to type into.
     $initialRows = [];
-    $copyMeta = [];
 
     foreach (SessionReport::ROW_SECTIONS as $column => $section) {
         $rows = old($section['input'], $report?->rows($column) ?? []);
         $blank = array_fill_keys($section['fields'], '');
 
         $initialRows[$section['input']] = $rows === [] ? [$blank] : array_values($rows);
+    }
 
+    /*
+     * The correction sections as the COPIED report orders them: grammar, then
+     * vocabulary, then pronunciation. Deliberately not the form's order — the
+     * student reads the corrections first and the word lists last, which is the
+     * running order the school's feedback has always been sent in.
+     */
+    $copyMeta = [];
+
+    foreach (['grammar_section', 'vocab_section', 'pronunciation_section'] as $column) {
         $copyMeta[] = [
-            'input' => $section['input'],
-            'title' => $sectionMeta[$column]['title'],
-            'fields' => $section['fields'],
+            'input' => SessionReport::ROW_SECTIONS[$column]['input'],
+            'fields' => SessionReport::ROW_SECTIONS[$column]['fields'],
+            'title' => $sectionMeta[$column]['copy']['title'],
+            'style' => $sectionMeta[$column]['copy']['style'],
+            'labels' => $sectionMeta[$column]['copy']['labels'] ?? null,
         ];
     }
 
@@ -102,26 +122,49 @@
     }
 
     /*
-     * The enrolment facts that head the copied report: who it is for, when they
-     * started, and the shape of their classes. None of them are editable on this
-     * form, so they are laid out once here instead of being tracked in Alpine.
-     * A fact that was never recorded is left out rather than pasted as a dash.
+     * The enrolment facts that CLOSE the copied report. The school's format
+     * signs off with them under a rule rather than opening on them, so the
+     * student reads the lesson first and the admin detail after.
+     *
+     * They come in two halves because the lesson lines sit between them and
+     * those are Alpine-owned; everything here is fixed for the session, so it is
+     * laid out once instead of being tracked in state. A fact that was never
+     * recorded is left out rather than pasted as a dash.
+     *
+     * Age is read off the teaching method — the only place the school records
+     * whether a student is a child — so an audio enrolment, which says nothing
+     * about age, simply has no Age line.
      */
-    $copyHeader = [];
+    $copyDate = \Carbon\Carbon::parse($date)->format('F j, Y');
 
-    foreach ([
-        'Student' => $student->name,
-        'Start date' => $profile?->start_date?->format('F j, Y'),
-        'Class day' => $student->schedules->map->dayName()->implode(', '),
-        'Class time' => $classTime,
-        'Class duration' => $profile?->learning_time ? $profile->learning_time.' minutes' : null,
-        'Type of class' => $profile?->teaching_method?->label(),
-        'Class date' => \Carbon\Carbon::parse($date)->format('l, F j, Y'),
-    ] as $label => $value) {
-        if ((string) $value !== '') {
-            $copyHeader[] = $label.': '.$value;
+    $copyLines = function (array $facts): array {
+        $out = [];
+
+        foreach ($facts as $label => $value) {
+            if ((string) $value !== '') {
+                $out[] = $label.': '.$value;
+            }
         }
-    }
+
+        return $out;
+    };
+
+    $copyFooterTop = $copyLines([
+        'Name' => $student->name,
+        'Age' => match ($profile?->teaching_method) {
+            \App\Enums\TeachingMethod::VideoKids => 'Kids',
+            \App\Enums\TeachingMethod::VideoAdults => 'Adult',
+            default => null,
+        },
+    ]);
+
+    $copyFooterBottom = $copyLines([
+        'Class duration' => $profile?->learning_time,
+        // "M/W/F" — the compact timetable every report is signed off with.
+        'Days' => $student->schedules->map->dayInitial()->implode('/'),
+        // Every class in the academy is called in Korea time.
+        'Time' => $classTime ? $classTime.' (KT)' : null,
+    ]);
 @endphp
 
 @section('content')
@@ -258,39 +301,74 @@
                   return this.rows[input].filter((r) => Object.values(r).some((v) => (v || '').trim() !== ''));
               },
 
-              {{-- Legacy's Copy All: the report as plain text, for pasting into a
-                   chat with the student. --}}
+              {{-- One section of corrections, in the shape the school's reports
+                   are written in: grammar as numbered "You say / Better say"
+                   pairs, the word lists as dashes. --}}
+              copySection(s) {
+                  const rows = this.filled(s.input);
+
+                  if (rows.length === 0) return [];
+
+                  const out = [s.title];
+
+                  if (s.style === 'numbered') {
+                      rows.forEach((r, i) => {
+                          {{-- A blank line between corrections, none before the
+                               first, so the block does not open on empty space. --}}
+                          if (i > 0) out.push('');
+
+                          out.push(`#${i + 1}`);
+
+                          s.fields.forEach((f, n) => {
+                              if (r[f]) out.push(s.labels[n] + r[f]);
+                          });
+                      });
+
+                      return out;
+                  }
+
+                  {{-- "- Independent — able to live or work on your own", and
+                       just "- Together" when only the word was typed. --}}
+                  rows.forEach((r) => out.push('- ' + s.fields.map((f) => r[f]).filter(Boolean).join(' — ')));
+
+                  return out;
+              },
+
+              {{-- The report as plain text, for pasting into a chat with the
+                   student. The layout is the school's own feedback format rather
+                   than the form's: scores, then the corrections, then the
+                   enrolment details and the teacher's message under a rule. --}}
               copyAll() {
-                  const out = [...@js($copyHeader), ''];
+                  const out = ['[Class feedback]', '', `Date: {{ $copyDate }}`];
+
+                  const scored = Object.entries(this.scores).filter(([, v]) => v !== '');
+
+                  if (scored.length) {
+                      out.push('', '[CLASS SCORES]', '');
+                      scored.forEach(([k, v]) => out.push(`${@js(SessionReport::SCORE_FIELDS)[k]}: ${v}/{{ SessionReport::SCORE_MAX }}`));
+                  }
+
+                  this.sections.forEach((s) => {
+                      const section = this.copySection(s);
+
+                      if (section.length) out.push('', ...section);
+                  });
+
+                  out.push('', '---', ...@js($copyFooterTop));
+
+                  if (this.today) out.push(`Lesson: ${this.today}`);
+                  if (this.next) out.push(`Next lesson: ${this.next}`);
+
+                  out.push(...@js($copyFooterBottom));
 
                   {{-- Where the student is in their plan: 5/15 taught, 10 left. --}}
                   out.push(`Sessions: ${this.progress.attended}/${this.progress.purchased} attended · ${this.progress.remaining} remaining · ${this.progress.deducted} deducted`);
                   out.push(`Absent: ${this.progress.student_absent} student · ${this.progress.teacher_absent} teacher`);
                   out.push(`Postponed: ${this.progress.student_postponed} student · ${this.progress.teacher_postponed} teacher`);
-                  out.push('');
 
-                  if (this.today) out.push(`Today's lesson: ${this.today}`);
-                  if (this.next) out.push(`Next lesson: ${this.next}`);
-
-                  this.sections.forEach((s) => {
-                      const rows = this.filled(s.input);
-                      if (rows.length === 0) return;
-
-                      out.push('', s.title);
-                      rows.forEach((r) => out.push('- ' + s.fields.map((f) => r[f]).filter(Boolean).join(' → ')));
-                  });
-
-                  const scored = Object.entries(this.scores).filter(([, v]) => v !== '');
-
-                  if (scored.length) {
-                      out.push('', 'Class evaluation');
-                      scored.forEach(([k, v]) => out.push(`- ${@js(SessionReport::SCORE_FIELDS)[k]}: ${v}/{{ SessionReport::SCORE_MAX }}`));
-                  }
-
-                  {{-- Headed like every other section, and like legacy wrote it.
-                       Pushed as one entry so the line breaks the instructor typed
+                  {{-- Pushed as one entry so the line breaks the instructor typed
                        survive the join. --}}
-                  if (this.comments) out.push('', `Teacher's Comments`, this.comments);
+                  if (this.comments) out.push('', `Teacher's message:`, '', this.comments);
 
                   navigator.clipboard.writeText(out.join('\n'))
                       .then(() => window.notify('success', 'Report copied to clipboard.'))

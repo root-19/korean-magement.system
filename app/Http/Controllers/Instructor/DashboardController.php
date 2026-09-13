@@ -275,7 +275,10 @@ class DashboardController extends Controller
     private function unreportedSessions(int $instructorId, PayoutWindow $window): Collection
     {
         return ClassSession::query()
-            ->with('student:id,name,avatar_path')
+            // The enrolment type comes along so the list can say which of these
+            // are trials: they still owe the student a report, but from
+            // academy.trial_unpaid_from they no longer owe the instructor pay.
+            ->with(['student:id,name,avatar_path', 'student.studentProfile:user_id,is_regular'])
             ->where('instructor_id', $instructorId)
             ->settled()
             ->paidBetween($window->startDate(), $window->endDate())
