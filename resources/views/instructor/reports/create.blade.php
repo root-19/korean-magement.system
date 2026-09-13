@@ -113,6 +113,7 @@
         'Student' => $student->name,
         'Start date' => $profile?->start_date?->format('F j, Y'),
         'Class day' => $student->schedules->map->dayName()->implode(', '),
+        'Class time' => $classTime,
         'Class duration' => $profile?->learning_time ? $profile->learning_time.' minutes' : null,
         'Type of class' => $profile?->teaching_method?->label(),
         'Class date' => \Carbon\Carbon::parse($date)->format('l, F j, Y'),

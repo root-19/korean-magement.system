@@ -457,6 +457,7 @@ class SessionReportFormTest extends TestCase
                 'Student: A194 Report Student',
                 'Start date: March 2, 2026',
                 'Class day: Monday, Wednesday',
+                'Class time: 6:30 PM',
                 'Class duration: 25 minutes',
                 'Type of class: Video (Adults)',
                 'Class date: Monday, August 3, 2026',
@@ -490,5 +491,45 @@ class SessionReportFormTest extends TestCase
             ]),
             $html,
         );
+    }
+
+    #[Test]
+    public function a_makeup_heads_the_copied_report_with_the_agreed_hour(): void
+    {
+        // The student's usual Monday slot, which the makeup does not run at.
+        StudentSchedule::create(['student_id' => $this->student->id, 'day_of_week' => 1, 'start_time' => '18:30:00']);
+
+        // Legacy shape: the makeup is its own row on the day it is taught, with
+        // the agreed hour in makeup_time because it has no timetable slot.
+        ClassSession::factory()
+            ->for($this->instructor, 'instructor')
+            ->for($this->student, 'student')
+            ->on($this->date)
+            ->makeupFor('2026-07-27', '12:00:00')
+            ->create();
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
+            ->assertOk()
+            ->assertSee('Class time: 12:00 PM');
+    }
+
+    #[Test]
+    public function a_rescheduled_class_heads_the_copied_report_with_the_new_hour(): void
+    {
+        StudentSchedule::create(['student_id' => $this->student->id, 'day_of_week' => 1, 'start_time' => '18:30:00']);
+
+        // Modern shape: the original slot keeps its row and points forward, so
+        // nothing on this date matches paid_date — the pointer carries the hour.
+        ClassSession::factory()
+            ->for($this->instructor, 'instructor')
+            ->for($this->student, 'student')
+            ->on('2026-07-27')
+            ->create(['rescheduled_date' => $this->date, 'rescheduled_time' => '14:00:00']);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
+            ->assertOk()
+            ->assertSee('Class time: 2:00 PM');
     }
 }

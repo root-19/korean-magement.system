@@ -177,12 +177,16 @@ class SessionReportController extends Controller
     private function form(int $instructorId, User $student, string $date, ?SessionReport $report): View
     {
         $profile = $student->studentProfile;
+        $session = $this->linkedSession($instructorId, $student->id, $date);
 
         return view('instructor.reports.create', [
             'student' => $student,
             'profile' => $profile,
             'date' => $date,
-            'session' => $this->linkedSession($instructorId, $student->id, $date),
+            'session' => $session,
+
+            // The hour the class starts, for the copied report's header.
+            'classTime' => $this->classStartTime($instructorId, $student, $date, $session),
             'report' => $report,
             'previous' => $this->previousReport($instructorId, $student->id, $date),
 
@@ -322,6 +326,36 @@ class SessionReportController extends Controller
             $sections,
             ['class_session_id' => $this->linkedSession($instructorId, $studentId, $date)?->id],
         );
+    }
+
+    /**
+     * When this class starts, as "6:30 PM" — the hour the student was told to
+     * turn up, not the hour the report is being written.
+     *
+     * A makeup wins over the weekly timetable: it lands on whatever day the
+     * student could come back, often a weekday they have no slot on at all, and
+     * at an hour both sides agreed on. DayRoster resolves the class list the
+     * same way, and legacy's feedback page preferred teacher_presence.makeup_time
+     * over the per-day schedule column for the same reason.
+     *
+     * Left null when no time was ever recorded, so the header can omit the line
+     * rather than paste a dash to the student.
+     */
+    private function classStartTime(int $instructorId, User $student, string $date, ?ClassSession $session): ?string
+    {
+        $makeup = ClassSession::query()
+            ->where('instructor_id', $instructorId)
+            ->where('student_id', $student->id)
+            ->whereDate('rescheduled_date', $date)
+            ->first();
+
+        $time = ($makeup?->rescheduled_time ?: $makeup?->makeup_time)
+            ?: ($session?->startTime()
+                ?: $student->schedules
+                    ->firstWhere('day_of_week', CarbonImmutable::parse($date)->dayOfWeekIso)
+                    ?->start_time);
+
+        return $time ? CarbonImmutable::parse($time)->format('g:i A') : null;
     }
 
     /**
