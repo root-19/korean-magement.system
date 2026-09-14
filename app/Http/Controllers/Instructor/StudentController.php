@@ -174,7 +174,7 @@ class StudentController extends Controller
             'student' => $student,
             'profile' => $profile,
             'sessions' => $sessions,
-            'stats' => $this->stats($instructor->id, $student->id, $profile),
+            'stats' => $this->stats($student->id, $profile),
         ]);
     }
 
@@ -236,9 +236,14 @@ class StudentController extends Controller
      * compared and any drift in the legacy counters is visible rather than
      * hidden.
      *
+     * Every count is for the STUDENT, not for this teacher's classes with them.
+     * The plan lives on the student's profile and none of it is per-teacher, so
+     * counting only one instructor's rows against a plan-wide total made a
+     * reassigned student's history look like it had been thrown away.
+     *
      * @return array<string, int>
      */
-    private function stats(int $instructorId, int $studentId, StudentProfile $profile): array
+    private function stats(int $studentId, StudentProfile $profile): array
     {
         $counts = ClassSession::query()
             ->selectRaw('
@@ -252,7 +257,6 @@ class StudentController extends Controller
                 SessionStatus::Absent->value, Party::Teacher->value,
                 SessionStatus::Postponed->value,
             ])
-            ->where('instructor_id', $instructorId)
             ->where('student_id', $studentId)
             ->first();
 

@@ -191,7 +191,7 @@ class SessionReportController extends Controller
             'previous' => $this->previousReport($instructorId, $student->id, $date),
 
             // Where the student is in their plan — "5 of 15 taught, 10 left".
-            'progress' => $this->progress($profile, $instructorId, $student->id),
+            'progress' => $this->progress($profile, $student->id),
         ]);
     }
 
@@ -209,9 +209,9 @@ class SessionReportController extends Controller
      *
      * @return array<string, int>
      */
-    private function progress(?StudentProfile $profile, int $instructorId, int $studentId): array
+    private function progress(?StudentProfile $profile, int $studentId): array
     {
-        $counts = $this->attendanceCounts($instructorId, $studentId);
+        $counts = $this->attendanceCounts($studentId);
 
         return array_merge($counts, [
             'purchased' => (int) ($profile?->sessionsPurchased($counts['student_absent']) ?? 0),
@@ -225,9 +225,17 @@ class SessionReportController extends Controller
      * postponements split by who is responsible — the breakdown the Copy All
      * text and the summary card both need, so it is asked for once and reused.
      *
+     * Counted for the STUDENT, across every instructor who has ever taught
+     * them. The plan is the student's: `sessions_remaining`, `sessions_attended`
+     * and `sessions_deducted` all sit on their profile and none of them are
+     * per-teacher, so scoping the rows to the instructor reading the page broke
+     * the identity — a student reassigned to a new teacher showed "1/12" on
+     * their sixth class, because only the one class this teacher had taught was
+     * counted against a total that still counted all twelve.
+     *
      * @return array<string, int>
      */
-    private function attendanceCounts(int $instructorId, int $studentId): array
+    private function attendanceCounts(int $studentId): array
     {
         $counts = ClassSession::query()
             ->selectRaw('
@@ -243,7 +251,6 @@ class SessionReportController extends Controller
                 SessionStatus::Postponed->value, Party::Student->value,
                 SessionStatus::Postponed->value, Party::Teacher->value,
             ])
-            ->where('instructor_id', $instructorId)
             ->where('student_id', $studentId)
             ->first();
 

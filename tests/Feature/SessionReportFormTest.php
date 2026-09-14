@@ -300,6 +300,51 @@ class SessionReportFormTest extends TestCase
     }
 
     #[Test]
+    public function classes_taught_by_a_previous_teacher_still_count_towards_the_plan(): void
+    {
+        // Reassigning a student to another teacher leaves their old sessions
+        // with the teacher who taught them — class_sessions carries its own
+        // instructor_id and earnings must not move. The PLAN, though, is the
+        // student's: counting only the new teacher's rows against a plan-wide
+        // total showed a student on their sixth class as "1/12".
+        $previousTeacher = User::factory()->instructor()->create();
+
+        StudentProfile::where('user_id', $this->student->id)->update([
+            'sessions_attended' => 6,
+            'sessions_remaining' => 6,
+            'sessions_deducted' => 0,
+        ]);
+
+        // Five classes with the teacher the student has just been moved away
+        // from, then one with the teacher filing this report.
+        for ($i = 1; $i <= 5; $i++) {
+            ClassSession::factory()
+                ->for($previousTeacher, 'instructor')
+                ->for($this->student, 'student')
+                ->present()
+                ->on(Carbon::parse($this->date)->subDays($i + 1)->toDateString())
+                ->create();
+        }
+
+        $this->taught(1);
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
+            ->assertOk()
+            // 6 taught of 12 — 6 attended + 6 remaining — whoever taught them.
+            ->assertSee('6/12')
+            ->assertSee('6 remaining');
+
+        // …and the student page counts the same six, rather than reporting the
+        // five the previous teacher taught as drift against the stored counter.
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.students.show', $this->student))
+            ->assertOk()
+            ->assertSeeInOrder(['Attended', '6'])
+            ->assertDontSee('The stored attendance counter reads');
+    }
+
+    #[Test]
     public function the_taught_and_deducted_counts_match_the_student_page(): void
     {
         // The two pages read the same enrolment, so they must not disagree.

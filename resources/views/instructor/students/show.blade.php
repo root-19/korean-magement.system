@@ -48,7 +48,10 @@
 
     <div class="mt-6 grid gap-4 lg:grid-cols-3">
         <div class="lg:col-span-2">
-            <x-card title="Session history" :subtitle="$sessions->total().' recorded'" flush>
+            {{-- Your classes with this student. The stat cards above count the
+                 whole plan, which can include classes a previous teacher
+                 taught, so the two figures are allowed to differ. --}}
+            <x-card title="Session history" :subtitle="$sessions->total().' taught by you'" flush>
                 @if ($sessions->isEmpty())
                     <x-empty-state icon="calendar" title="No sessions yet"
                                    message="Attendance you record for this student will appear here." />
