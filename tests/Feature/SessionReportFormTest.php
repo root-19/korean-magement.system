@@ -432,11 +432,11 @@ class SessionReportFormTest extends TestCase
     }
 
     #[Test]
-    public function the_copied_report_is_signed_off_with_the_enrolment_details(): void
+    public function the_copied_report_is_headed_by_the_enrolment_details(): void
     {
         // Who the report is for and the shape of their classes — the student
-        // reads the pasted text without any of this on screen. The school's
-        // format closes with these rather than opening on them.
+        // reads the pasted text without any of this on screen, so it heads the
+        // copy alongside the date.
         StudentProfile::where('user_id', $this->student->id)->update([
             'learning_time' => 25,
             'teaching_method' => TeachingMethod::VideoAdults,
@@ -469,7 +469,7 @@ class SessionReportFormTest extends TestCase
     }
 
     #[Test]
-    public function an_unrecorded_enrolment_detail_is_left_out_of_the_copied_sign_off(): void
+    public function an_unrecorded_enrolment_detail_is_left_out_of_the_copied_header(): void
     {
         // Rather than pasting "Days: —" at the student. No timetable rows exist
         // here, and an audio enrolment records nothing about the student's age.

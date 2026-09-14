@@ -122,9 +122,8 @@
     }
 
     /*
-     * The enrolment facts that CLOSE the copied report. The school's format
-     * signs off with them under a rule rather than opening on them, so the
-     * student reads the lesson first and the admin detail after.
+     * The enrolment facts that OPEN the copied report, under the date: who the
+     * report is for and the shape of their classes, before any of the teaching.
      *
      * They come in two halves because the lesson lines sit between them and
      * those are Alpine-owned; everything here is fixed for the session, so it is
@@ -149,7 +148,7 @@
         return $out;
     };
 
-    $copyFooterTop = $copyLines([
+    $copyFactsTop = $copyLines([
         'Name' => $student->name,
         'Age' => match ($profile?->teaching_method) {
             \App\Enums\TeachingMethod::VideoKids => 'Kids',
@@ -158,9 +157,9 @@
         },
     ]);
 
-    $copyFooterBottom = $copyLines([
+    $copyFactsBottom = $copyLines([
         'Class duration' => $profile?->learning_time,
-        // "M/W/F" — the compact timetable every report is signed off with.
+        // "M/W/F" — the compact timetable every report carries.
         'Days' => $student->schedules->map->dayInitial()->implode('/'),
         // Every class in the academy is called in Korea time.
         'Time' => $classTime ? $classTime.' (KT)' : null,
@@ -336,10 +335,26 @@
 
               {{-- The report as plain text, for pasting into a chat with the
                    student. The layout is the school's own feedback format rather
-                   than the form's: scores, then the corrections, then the
-                   enrolment details and the teacher's message under a rule. --}}
+                   than the form's: the date and who the class was for, then the
+                   scores and the corrections, then the teacher's message under a
+                   rule. --}}
               copyAll() {
-                  const out = ['[Class feedback]', '', `Date: {{ $copyDate }}`];
+                  const out = ['[Class feedback]', ''];
+
+                  {{-- The date and the enrolment details head the report
+                       together, so the student knows whose class this was before
+                       reading a word of it. --}}
+                  out.push(`Date: {{ $copyDate }}`, ...@js($copyFactsTop));
+
+                  if (this.today) out.push(`Lesson: ${this.today}`);
+                  if (this.next) out.push(`Next lesson: ${this.next}`);
+
+                  out.push(...@js($copyFactsBottom));
+
+                  {{-- Where the student is in their plan: 5/15 taught, 10 left. --}}
+                  out.push(`Sessions: ${this.progress.attended}/${this.progress.purchased} attended · ${this.progress.remaining} remaining · ${this.progress.deducted} deducted`);
+                  out.push(`Absent: ${this.progress.student_absent} student · ${this.progress.teacher_absent} teacher`);
+                  out.push(`Postponed: ${this.progress.student_postponed} student · ${this.progress.teacher_postponed} teacher`);
 
                   const scored = Object.entries(this.scores).filter(([, v]) => v !== '');
 
@@ -354,21 +369,10 @@
                       if (section.length) out.push('', ...section);
                   });
 
-                  out.push('', '---', ...@js($copyFooterTop));
-
-                  if (this.today) out.push(`Lesson: ${this.today}`);
-                  if (this.next) out.push(`Next lesson: ${this.next}`);
-
-                  out.push(...@js($copyFooterBottom));
-
-                  {{-- Where the student is in their plan: 5/15 taught, 10 left. --}}
-                  out.push(`Sessions: ${this.progress.attended}/${this.progress.purchased} attended · ${this.progress.remaining} remaining · ${this.progress.deducted} deducted`);
-                  out.push(`Absent: ${this.progress.student_absent} student · ${this.progress.teacher_absent} teacher`);
-                  out.push(`Postponed: ${this.progress.student_postponed} student · ${this.progress.teacher_postponed} teacher`);
-
-                  {{-- Pushed as one entry so the line breaks the instructor typed
+                  {{-- The rule now closes the teaching and opens the sign-off.
+                       Pushed as one entry so the line breaks the instructor typed
                        survive the join. --}}
-                  if (this.comments) out.push('', `Teacher's message:`, '', this.comments);
+                  if (this.comments) out.push('', '---', '', `Teacher's message:`, '', this.comments);
 
                   navigator.clipboard.writeText(out.join('\n'))
                       .then(() => window.notify('success', 'Report copied to clipboard.'))
