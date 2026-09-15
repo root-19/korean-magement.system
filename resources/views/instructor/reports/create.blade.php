@@ -318,6 +318,39 @@
                   return out;
               },
 
+              {{-- The comments box holds two different things. Teachers write
+                   their own message and then, under a rule of asterisks, the
+                   idiom of the day the school sends out with every report —
+                   both typed into the one field, because the form only offers
+                   one.
+
+                   The copy pulls them apart so the teacher's message is the
+                   last thing the student reads instead of trailing off into a
+                   dictionary entry. Returns [message, extra block].
+
+                   The rule is asterisks ALONE on a line, so emphasis inside a
+                   sentence — "you did ***great*** today" — is not a separator,
+                   and only the first rule splits: anything the teacher wrote
+                   under a second one stays with the block it belongs to. --}}
+              splitComments() {
+                  const rule = this.comments.match(/^[ \t]*\*{3,}[ \t]*$/m);
+
+                  if (! rule) return [this.comments.trim(), []];
+
+                  const message = this.comments.slice(0, rule.index).trim();
+                  const tail = this.comments.slice(rule.index + rule[0].length).trim();
+
+                  if (tail === '') return [message, []];
+
+                  {{-- "Idiom of the Day" becomes "[IDIOM OF THE DAY]", so the
+                       block is headed the way every other section is. --}}
+                  const lines = tail.split('\n');
+                  const heading = lines.shift().trim();
+                  const body = lines.join('\n').trim();
+
+                  return [message, [`[${heading.toUpperCase()}]`, ...(body ? [body] : [])]];
+              },
+
               {{-- The report as plain text, for pasting into a chat with the
                    student. The layout is the school's own feedback format rather
                    than the form's: the date and who the class was for, then the
@@ -353,9 +386,15 @@
                       if (section.length) out.push('', ...section);
                   });
 
-                  {{-- The sign-off. Pushed as one entry so the line breaks the
-                       instructor typed survive the join. --}}
-                  if (this.comments) out.push('', `[TEACHER’S MESSAGE FOR TODAY’S CLASS]`, this.comments);
+                  {{-- The sign-off, and whatever the teacher wrote under the
+                       asterisk rule above it — the teacher's own words are the
+                       last thing the student reads. Each is pushed as one entry
+                       so the line breaks they typed survive the join. --}}
+                  const [message, extra] = this.splitComments();
+
+                  if (extra.length) out.push('', ...extra);
+
+                  if (message) out.push('', `[TEACHER’S MESSAGE FOR TODAY’S CLASS]`, message);
 
                   navigator.clipboard.writeText(out.join('\n'))
                       .then(() => window.notify('success', 'Report copied to clipboard.'))
