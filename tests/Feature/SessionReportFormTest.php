@@ -483,6 +483,7 @@ class SessionReportFormTest extends TestCase
         // reads the pasted text without any of this on screen, so it heads the
         // copy alongside the date.
         StudentProfile::where('user_id', $this->student->id)->update([
+            'start_date' => '2026-07-20',
             'learning_time' => 25,
             'teaching_method' => TeachingMethod::VideoAdults,
         ]);
@@ -493,22 +494,23 @@ class SessionReportFormTest extends TestCase
         $html = $this->actingAs($this->instructor)
             ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
             ->assertOk()
-            // The date heads the copy, without the weekday.
-            ->assertSee('Date: August 3, 2026')
             ->getContent();
 
-        // Serialised the way the view hands it to Alpine, rather than guessing at
-        // @js()'s attribute escaping. Two halves because the lesson lines, which
-        // Alpine owns, are written between them.
+        // The whole block in one assertion, serialised the way the view hands it
+        // to Alpine rather than guessing at @js()'s attribute escaping. The days
+        // are ordered by weekday, not by insertion, and written out in full —
+        // the student reads this with none of the page around it. Only the class
+        // date carries its weekday.
         $this->assertStringContainsString(
-            (string) Js::from(['Name: A194 Report Student', 'Age: Adult']),
-            $html,
-        );
-
-        // Ordered by weekday, not by insertion, and abbreviated the way the
-        // school writes a timetable.
-        $this->assertStringContainsString(
-            (string) Js::from(['Class duration: 25', 'Days: M/W', 'Time: 6:30 PM (KT)']),
+            (string) Js::from([
+                'Student: A194 Report Student',
+                'Start date: July 20, 2026',
+                'Class day: Monday, Wednesday',
+                'Class time: 6:30 PM (KT)',
+                'Class duration: 25 minutes',
+                'Type of class: Video (Adults)',
+                'Class date: Monday, August 3, 2026',
+            ]),
             $html,
         );
     }
@@ -516,8 +518,9 @@ class SessionReportFormTest extends TestCase
     #[Test]
     public function an_unrecorded_enrolment_detail_is_left_out_of_the_copied_header(): void
     {
-        // Rather than pasting "Days: —" at the student. No timetable rows exist
-        // here, and an audio enrolment records nothing about the student's age.
+        // Rather than pasting "Class day: —" at the student. No timetable rows
+        // exist here, so there is no start time either, and the enrolment has no
+        // start date on record.
         StudentProfile::where('user_id', $this->student->id)->update([
             'start_date' => null,
             'learning_time' => 25,
@@ -529,47 +532,51 @@ class SessionReportFormTest extends TestCase
             ->assertOk()
             ->getContent();
 
-        $this->assertStringContainsString((string) Js::from(['Name: A194 Report Student']), $html);
-        $this->assertStringContainsString((string) Js::from(['Class duration: 25']), $html);
+        $this->assertStringContainsString(
+            (string) Js::from([
+                'Student: A194 Report Student',
+                'Class duration: 25 minutes',
+                'Type of class: Audio',
+                'Class date: Monday, August 3, 2026',
+            ]),
+            $html,
+        );
     }
 
     #[Test]
     public function the_copied_report_runs_grammar_then_vocabulary_then_pronunciation(): void
     {
         // The reading order of the school's format, which is not the form's:
-        // corrections first, word lists last. Grammar is written as numbered
-        // "You say / Better say" pairs, the other two as dashed lists.
+        // corrections first, word lists last. Every section copies the same way
+        // — a labelled line per field — so only the heading and labels differ.
         $html = $this->actingAs($this->instructor)
             ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
             ->assertOk()
             ->assertSee('[CLASS SCORES]')
-            ->assertSee("Teacher's message:", false)
+            ->assertSee('[TEACHER’S MESSAGE FOR TODAY’S CLASS]', false)
             ->getContent();
 
         // The whole shape in one assertion, serialised the way the view hands it
-        // to Alpine — order, headings and per-section style together.
+        // to Alpine — order, headings and labels together.
         $this->assertStringContainsString(
             (string) Js::from([
                 [
                     'input' => 'grammar',
                     'fields' => ['yourSentence', 'betterSay'],
-                    'title' => '[Grammar Corrections]',
-                    'style' => 'numbered',
-                    'labels' => ['You say: ', 'Better say: > '],
+                    'title' => '[GRAMMAR]',
+                    'labels' => ['Your Sentence: ', 'Better Say: '],
                 ],
                 [
                     'input' => 'vocabulary',
                     'fields' => ['vocab', 'example'],
-                    'title' => '[Useful Vocabulary]',
-                    'style' => 'bullets',
-                    'labels' => null,
+                    'title' => '[VOCABULARY]',
+                    'labels' => ['New Vocabulary / Expression: ', 'Feedback / Suggestion: '],
                 ],
                 [
                     'input' => 'pronunciation',
                     'fields' => ['word', 'comment'],
-                    'title' => '[Pronunciation]',
-                    'style' => 'bullets',
-                    'labels' => null,
+                    'title' => '[PRONUNCIATION]',
+                    'labels' => ['Word to Practice: ', 'Feedback / Suggestion: '],
                 ],
             ]),
             $html,
@@ -594,7 +601,7 @@ class SessionReportFormTest extends TestCase
         $this->actingAs($this->instructor)
             ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
             ->assertOk()
-            ->assertSee('Time: 12:00 PM (KT)');
+            ->assertSee('Class time: 12:00 PM (KT)');
     }
 
     #[Test]
@@ -613,6 +620,6 @@ class SessionReportFormTest extends TestCase
         $this->actingAs($this->instructor)
             ->get(route('instructor.reports.create', ['student_id' => $this->student->id, 'date' => $this->date]))
             ->assertOk()
-            ->assertSee('Time: 2:00 PM (KT)');
+            ->assertSee('Class time: 2:00 PM (KT)');
     }
 }
