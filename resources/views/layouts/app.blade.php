@@ -164,6 +164,10 @@
     </div>
 
     <x-toasts />
+
+    {{-- Instructors reach the office over KakaoTalk like everyone else here.
+         no-print because it is chrome, matching the sidebar and header. --}}
+    <x-kakao-channel action="chat" class="no-print fixed bottom-5 right-5 z-30 shadow-lg" />
 </div>
 </body>
 </html>

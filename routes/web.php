@@ -17,6 +17,7 @@ use App\Http\Controllers\Instructor\ClassSessionController;
 use App\Http\Controllers\Instructor\DashboardController as InstructorDashboard;
 use App\Http\Controllers\Instructor\EarningsController;
 use App\Http\Controllers\Instructor\HistoryController;
+use App\Http\Controllers\Instructor\KakaoMessageController;
 use App\Http\Controllers\Instructor\LearningMaterialController;
 use App\Http\Controllers\Instructor\ProfileController;
 use App\Http\Controllers\Instructor\ScheduleController;
@@ -132,6 +133,15 @@ Route::middleware(['auth', 'role:instructor,admin'])
         Route::get('/earnings', [EarningsController::class, 'index'])->name('earnings.index');
 
         // Own profile
+        /*
+         * "Send today's roster to my KakaoTalk". A POST because it sends
+         * something, and the callback is the Redirect URI registered with
+         * Kakao — inside this group, so it stays behind auth and the role check
+         * like everything else the instructor does.
+         */
+        Route::post('/kakao/roster', [KakaoMessageController::class, 'store'])->name('kakao.roster');
+        Route::get('/kakao/callback', [KakaoMessageController::class, 'callback'])->name('kakao.callback');
+
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');

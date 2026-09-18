@@ -37,7 +37,14 @@
             @yield('content')
         </div>
 
-        <p class="mt-6 text-center text-xs text-gray-400">
+        {{-- Someone who cannot get in cannot email anyone either: 222 of the
+             256 accounts have no email address on file. KakaoTalk is how they
+             reach the academy. --}}
+        <div class="mt-6 flex justify-center">
+            <x-kakao-channel action="chat" label="Trouble signing in?" class="!bg-transparent !text-gray-400 hover:!bg-white/5 hover:!text-white" />
+        </div>
+
+        <p class="mt-2 text-center text-xs text-gray-400">
             &copy; {{ date('Y') }} {{ config('app.name') }}
         </p>
     </div>

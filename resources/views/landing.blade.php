@@ -303,8 +303,17 @@
 @endif
 
 <footer class="border-t border-white/5 py-8 text-center text-sm text-gray-500">
-    &copy; {{ date('Y') }} {{ config('app.name') }} · 저스트텐미닛
+    {{-- Adding the channel is what lets the academy message back, so it sits
+         with the contact details rather than under the hero. --}}
+    <x-kakao-channel action="add" class="mb-6" />
+
+    <p>&copy; {{ date('Y') }} {{ config('app.name') }} · 저스트텐미닛</p>
 </footer>
+
+{{-- A prospect with a question had nowhere to ask: the booking form wants a
+     KakaoTalk ID but gave no way to start the conversation. Fixed, so it stays
+     reachable through the schedule tables without scrolling back. --}}
+<x-kakao-channel action="chat" class="fixed bottom-5 right-5 z-40 shadow-lg" />
 
 <script>
     /**
