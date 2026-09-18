@@ -21,6 +21,11 @@ use Illuminate\Support\Facades\DB;
  *      marked off-timetable stays visible;
  *   3. students whose class was postponed TO this date.
  *
+ * All three are the instructor's own live students — approved, active and not
+ * archived, `StudentProfile::teachable()`. Groups 2 and 3 once skipped that
+ * check, because a session row looks like proof enough, and a single stray row
+ * was then all it took to list someone the instructor no longer teaches.
+ *
  * Students who have used up every prepaid session are then dropped — see
  * withoutFinishedStudents, which holds their row for 24 hours after the class
  * that finished them so the report can still be filed from it.
@@ -71,9 +76,18 @@ final class DayRoster
 
         // Anyone with a session touching this date, whether or not they are
         // timetabled on it.
+        //
+        // Still restricted to the instructor's own live students. A row records
+        // a class that happened; it does not say the instructor still teaches
+        // that student, and reading it as though it did put people who had been
+        // reassigned, deactivated or never approved back on the roster — badged
+        // "Off timetable", on a weekday they hold no slot on, with Present and
+        // Absent beside them. See ClassSession::scopeStudentTeachableBy, and the
+        // same rule already bounds group 1 through its joins below.
         $sessions = ClassSession::query()
             ->with(['student.studentProfile', 'student.schedules'])
             ->where('instructor_id', $instructorId)
+            ->studentTeachableBy($instructorId)
             ->where(fn ($q) => $q->where('scheduled_date', $dateString)
                 ->orWhere('paid_date', $dateString)
                 ->orWhere('rescheduled_date', $dateString))

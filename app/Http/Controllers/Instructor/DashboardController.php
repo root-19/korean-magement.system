@@ -107,6 +107,10 @@ class DashboardController extends Controller
         $recorded = ClassSession::query()
             ->select('paid_date', 'student_id', 'status')
             ->where('instructor_id', $instructorId)
+            // The roster's population, so a count here can always be opened.
+            // A day that counts a student the roster drops is a dot leading to
+            // an empty page, which is how the last one of these was reported.
+            ->studentTeachableBy($instructorId)
             ->whereBetween('paid_date', [$start->toDateString(), $end->toDateString()])
             ->get()
             ->groupBy(fn ($row) => (string) $row->paid_date->toDateString());
@@ -256,6 +260,7 @@ class DashboardController extends Controller
         return ClassSession::query()
             ->select('rescheduled_date', 'student_id')
             ->where('instructor_id', $instructorId)
+            ->studentTeachableBy($instructorId)
             // Only while the class is still postponed, matching DayRoster: a
             // slot that was re-marked or cleared is owed on its own date, and
             // rows written before that was enforced still carry a stale pointer.

@@ -121,6 +121,32 @@ class ClassSession extends Model
         return $query->where('instructor_id', $instructorId);
     }
 
+    /**
+     * Sessions whose student is still one of this instructor's live students.
+     *
+     * A session row is a record of a class, not a statement about who the
+     * instructor teaches now. Rosters are built from these rows as well as from
+     * the weekly timetable, and the timetable side has always checked the
+     * student — so without this a single row put someone who had been moved to
+     * another instructor, deactivated, or never approved back on the dashboard,
+     * on a weekday they hold no slot on. Legacy checked it too, re-reading every
+     * off-schedule student before adding them to the day
+     * (ClassModel::getStudentsWithAttendanceForDate).
+     *
+     * `StudentProfile::teachable()` is the rule itself, kept in one place: it
+     * already gates every other list an instructor sees.
+     */
+    public function scopeStudentTeachableBy(Builder $query, int $instructorId): Builder
+    {
+        return $query->whereIn(
+            'student_id',
+            StudentProfile::query()
+                ->forInstructor($instructorId)
+                ->teachable()
+                ->select('user_id'),
+        );
+    }
+
     /** Classes taught ahead of their scheduled slot. */
     public function scopeEarly(Builder $query): Builder
     {
