@@ -128,6 +128,21 @@ class KakaoChannelTest extends TestCase
     }
 
     #[Test]
+    public function an_unconfigured_dock_leaves_no_wrapper_behind(): void
+    {
+        // Not even the positioned div. An empty fixed wrapper is invisible but
+        // still counts as chrome, and the payslip asserts exactly how much
+        // chrome a page carries — see EarningsPrintTest.
+        $this->configure(channel: null);
+        config(['services.kakao.rest_key' => null]);
+
+        $this->actingAs(User::factory()->instructor()->create())
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertDontSee('fixed bottom-5 right-5');
+    }
+
+    #[Test]
     public function the_button_is_left_off_a_printed_page(): void
     {
         // Chrome, like the sidebar and the header: a payslip printed from the

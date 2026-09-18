@@ -87,7 +87,7 @@ class KakaoRosterMessageTest extends TestCase
         $this->actingAs($this->instructor)
             ->get(route('instructor.dashboard'))
             ->assertOk()
-            ->assertDontSee('Send to KakaoTalk');
+            ->assertDontSee('Send my roster');
     }
 
     #[Test]
@@ -106,7 +106,31 @@ class KakaoRosterMessageTest extends TestCase
         $this->actingAs($this->instructor)
             ->get(route('instructor.dashboard'))
             ->assertOk()
-            ->assertSee('Send to KakaoTalk');
+            ->assertSee('Send my roster');
+    }
+
+    #[Test]
+    public function the_button_floats_on_every_page_not_just_the_dashboard(): void
+    {
+        // It lives in the app shell, so a roster checked from the class list or
+        // the earnings page can be sent without navigating back.
+        foreach (['instructor.classes.index', 'instructor.earnings.index'] as $route) {
+            $this->actingAs($this->instructor)
+                ->get(route($route))
+                ->assertOk()
+                ->assertSee('Send my roster');
+        }
+    }
+
+    #[Test]
+    public function an_admin_gets_no_send_button(): void
+    {
+        // Admins share the instructor routes but have no roster of their own,
+        // so the button would send them an empty day.
+        $this->actingAs(User::factory()->admin()->create())
+            ->get(route('admin.dashboard'))
+            ->assertOk()
+            ->assertDontSee('Send my roster');
     }
 
     #[Test]

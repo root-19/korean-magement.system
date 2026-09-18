@@ -124,20 +124,6 @@
             {{-- Today's roster --}}
             <x-card title="Today's Schedule" :subtitle="now()->format('l, F j, Y')" flush>
                 <x-slot:actions>
-                    {{-- Hidden until a Kakao REST key is configured: the send
-                         needs a business app with talk_message approved, and a
-                         button that can only fail is worse than no button. --}}
-                    @if (App\Services\Kakao\KakaoMessenger::isConfigured())
-                        <form method="POST" action="{{ route('instructor.kakao.roster') }}" class="inline">
-                            @csrf
-                            <input type="hidden" name="date" value="{{ now()->toDateString() }}">
-                            <button type="submit" class="btn-secondary btn-sm">
-                                <x-icon name="chat" class="h-4 w-4 shrink-0" />
-                                Send to KakaoTalk
-                            </button>
-                        </form>
-                    @endif
-
                     <a href="{{ route('instructor.classes.index') }}" class="btn-secondary btn-sm">Class list</a>
                 </x-slot:actions>
 
