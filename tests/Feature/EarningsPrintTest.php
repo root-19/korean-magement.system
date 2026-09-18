@@ -141,12 +141,14 @@ class EarningsPrintTest extends TestCase
     {
         $html = $this->payslip();
 
-        // The sidebar, the sticky header and the toast tray are all chrome; the
-        // print stylesheet hides everything carrying this class.
+        // The sidebar, the sticky header, the toast tray and the KakaoTalk dock
+        // are all chrome; the print stylesheet hides everything carrying this
+        // class. The dock counts whether or not a channel is configured — its
+        // "coming soon" placeholder is chrome too.
         $this->assertSame(
-            4,
+            5,
             substr_count($html, 'no-print'),
-            'sidebar, its mobile overlay, the header and the toast tray',
+            'sidebar, its mobile overlay, the header, the toast tray and the Kakao dock',
         );
     }
 

@@ -128,18 +128,44 @@ class KakaoChannelTest extends TestCase
     }
 
     #[Test]
-    public function an_unconfigured_dock_leaves_no_wrapper_behind(): void
+    public function an_unconfigured_dock_shows_a_coming_soon_placeholder(): void
     {
-        // Not even the positioned div. An empty fixed wrapper is invisible but
-        // still counts as chrome, and the payslip asserts exactly how much
-        // chrome a page carries — see EarningsPrintTest.
+        // Staff have been told KakaoTalk support is on its way, so an empty
+        // corner reads as a bug. The placeholder is inert: no pf.kakao.com
+        // link behind it, because there is no channel to open yet.
         $this->configure(channel: null);
         config(['services.kakao.rest_key' => null]);
 
         $this->actingAs(User::factory()->instructor()->create())
             ->get(route('instructor.dashboard'))
             ->assertOk()
-            ->assertDontSee('fixed bottom-5 right-5');
+            ->assertSee('fixed bottom-5 right-5')
+            ->assertSee('KakaoTalk — coming soon', escape: false)
+            ->assertDontSee('pf.kakao.com');
+    }
+
+    #[Test]
+    public function a_configured_channel_replaces_the_placeholder(): void
+    {
+        // One control in that corner, never both.
+        $this->configure();
+
+        $this->actingAs(User::factory()->instructor()->create())
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertSee('https://pf.kakao.com/_abcdef/chat')
+            ->assertDontSee('coming soon');
+    }
+
+    #[Test]
+    public function the_placeholder_stays_off_the_pages_a_visitor_sees(): void
+    {
+        // Signed-in pages only: a visitor deciding whether to book has no use
+        // for a support channel they cannot open.
+        $this->configure(channel: null);
+
+        $this->get(route('home'))->assertOk()->assertDontSee('coming soon');
+        $this->get(route('login'))->assertOk()->assertDontSee('coming soon');
     }
 
     #[Test]
