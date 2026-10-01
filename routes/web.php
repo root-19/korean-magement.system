@@ -24,6 +24,7 @@ use App\Http\Controllers\Instructor\ScheduleController;
 use App\Http\Controllers\Instructor\SessionReportController;
 use App\Http\Controllers\Instructor\StudentController;
 use App\Http\Controllers\LandingController;
+use App\Http\Controllers\Student\DashboardController as StudentDashboard;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -145,6 +146,26 @@ Route::middleware(['auth', 'role:instructor,admin'])
         Route::get('/profile', [ProfileController::class, 'edit'])->name('profile.edit');
         Route::patch('/profile', [ProfileController::class, 'update'])->name('profile.update');
         Route::put('/profile/password', [ProfileController::class, 'updatePassword'])->name('profile.password');
+    });
+
+/*
+|--------------------------------------------------------------------------
+| Student
+|--------------------------------------------------------------------------
+|
+| Read-only: class counts, timetable and the published learning materials.
+| The PDF download reuses the instructor controller, which already serves
+| published files only and keeps them behind auth.
+|
+*/
+
+Route::middleware(['auth', 'role:student'])
+    ->prefix('student')
+    ->name('student.')
+    ->group(function () {
+        Route::get('/dashboard', StudentDashboard::class)->name('dashboard');
+        Route::get('/learning-materials/{material}/download', [LearningMaterialController::class, 'download'])
+            ->name('materials.download');
     });
 
 /*

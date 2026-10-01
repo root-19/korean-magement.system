@@ -147,7 +147,7 @@ class StudentController extends Controller
         return redirect()
             ->route('instructor.students.index')
             ->with('success', sprintf(
-                '%s enrolled and sent for approval. Temporary password: %s',
+                '%s enrolled and sent for approval. Login: their name, password: %s',
                 $result['student']->name,
                 $result['password'],
             ));

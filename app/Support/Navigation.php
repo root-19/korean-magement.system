@@ -36,8 +36,24 @@ final class Navigation
     {
         return match (true) {
             $user->isAdmin() => self::admin(),
+            $user->isStudent() => self::student(),
             default => self::instructor(),
         };
+    }
+
+    /**
+     * @return array<int, array{label: ?string, items: array<int, mixed>}>
+     */
+    private static function student(): array
+    {
+        return [
+            [
+                'label' => null,
+                'items' => [
+                    self::item('Dashboard', 'student.dashboard', 'dashboard'),
+                ],
+            ],
+        ];
     }
 
     /**

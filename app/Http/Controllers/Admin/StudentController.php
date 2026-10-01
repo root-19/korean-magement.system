@@ -97,7 +97,7 @@ class StudentController extends Controller
         return redirect()
             ->route('admin.students.show', $result['student'])
             ->with('success', sprintf(
-                '%s enrolled and approved. Temporary password: %s',
+                '%s enrolled and approved. Login: their name, password: %s',
                 $result['student']->name,
                 $result['password'],
             ));

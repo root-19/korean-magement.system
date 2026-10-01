@@ -10,7 +10,6 @@ use App\Models\StudentProfile;
 use App\Models\StudentSchedule;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Str;
 
 /**
  * Creates a student account, profile and weekly timetable in one transaction.
@@ -24,6 +23,8 @@ use Illuminate\Support\Str;
  */
 class StudentEnroller
 {
+    public const DEFAULT_PASSWORD = 'just10academy';
+
     /**
      * @param  array{
      *     name: string,
@@ -47,8 +48,8 @@ class StudentEnroller
 
         return DB::transaction(function () use ($actor, $data, $instructor) {
             // Students are enrolled on their behalf and rarely have an email, so
-            // a password is generated and handed to whoever enrolled them.
-            $password = $data['password'] ?? Str::upper(Str::random(8));
+            // they sign in with their name and the academy's default password.
+            $password = $data['password'] ?? self::DEFAULT_PASSWORD;
 
             $email = trim((string) ($data['email'] ?? ''));
 
