@@ -95,6 +95,8 @@ class LoginController extends Controller
      */
     protected function resolveUser(string $login): ?User
     {
+        $login = trim($login);
+
         if (filter_var($login, FILTER_VALIDATE_EMAIL)) {
             return User::where('email', $login)->first();
         }

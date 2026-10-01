@@ -39,8 +39,8 @@
                         x-on:click="show = !show"
                         class="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 transition hover:text-gray-200"
                         :aria-label="show ? 'Hide password' : 'Show password'">
-                    <x-icon name="search" class="h-4 w-4" x-show="!show" />
-                    <x-icon name="x" class="h-4 w-4" x-show="show" x-cloak />
+                    <x-icon name="eye" class="h-5 w-5" x-show="!show" />
+                    <x-icon name="eye-off" class="h-5 w-5" x-show="show" x-cloak />
                 </button>
             </div>
 
