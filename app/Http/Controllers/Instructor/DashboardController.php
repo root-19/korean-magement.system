@@ -27,6 +27,9 @@ use Illuminate\View\View;
  */
 class DashboardController extends Controller
 {
+    /** How many past days the "no attendance recorded" panel looks back over. */
+    private const UNMARKED_LOOKBACK_DAYS = 7;
+
     public function __construct(private readonly EarningsCalculator $earnings) {}
 
     public function __invoke(Request $request): View
@@ -70,6 +73,7 @@ class DashboardController extends Controller
 
             'calendar' => $this->calendar($instructor->id, $month),
             'month' => $month,
+            'unmarked' => $this->unmarkedClasses($instructor->id),
             'unreported' => $this->unreportedSessions($instructor->id, $window),
             'weekBreakdown' => $this->weekBreakdown($instructor->id, $window),
         ]);
@@ -271,6 +275,28 @@ class DashboardController extends Controller
             ->groupBy(fn ($session) => $session->rescheduled_date->toDateString())
             ->map(fn ($sessions) => $sessions->pluck('student_id')->map(fn ($id) => (int) $id)->unique()->all())
             ->all();
+    }
+
+    /**
+     * Past classes with no Present, Absent or Postponed recorded, newest first.
+     *
+     * Built from DayRoster rather than a query of its own, so every entry opens
+     * onto the same row on that date's roster — including timetabled classes
+     * that never got a session row at all, which a class_sessions query misses.
+     * Today is left out: it is already on the page, still markable.
+     *
+     * @return Collection<int, array<string, mixed>>
+     */
+    private function unmarkedClasses(int $instructorId): Collection
+    {
+        $today = CarbonImmutable::today();
+
+        return collect(range(1, self::UNMARKED_LOOKBACK_DAYS))
+            ->map(fn (int $daysAgo) => $today->subDays($daysAgo))
+            ->flatMap(fn (CarbonImmutable $date) => DayRoster::for($instructorId, $date)
+                ->filter(fn (array $row) => $row['session']?->status === null)
+                ->map(fn (array $row) => $row + ['date' => $date]))
+            ->values();
     }
 
     /**

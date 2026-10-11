@@ -66,6 +66,52 @@
                      hint="{{ $summary->sessionsDeducted() }} teacher-absent" />
     </div>
 
+    {{-- Past classes with no attendance recorded. Each opens that date's
+         roster, where the class can be sent for evaluation. --}}
+    @if ($unmarked->isNotEmpty())
+        <div class="mt-6 rounded-card border border-danger-500/30 bg-danger-500/10 p-5">
+            <div class="flex flex-wrap items-start gap-3">
+                <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-danger-500/20 text-danger-400">
+                    <x-icon name="alert" class="h-5 w-5" />
+                </span>
+
+                <div class="min-w-0 flex-1">
+                    <h2 class="text-sm font-bold text-danger-400">
+                        {{ $unmarked->count() }} {{ Str::plural('class', $unmarked->count()) }} with no attendance recorded
+                    </h2>
+                    <p class="mt-0.5 text-sm text-danger-400/80">
+                        These past classes were never marked Present, Absent or Postponed.
+                        Open the date to send each one for evaluation.
+                    </p>
+
+                    <ul class="mt-3 flex flex-wrap gap-2">
+                        @foreach ($unmarked->take(10) as $row)
+                            <li>
+                                <a href="{{ route('instructor.dashboard', ['date' => $row['date']->toDateString()]) }}"
+                                   class="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-danger-500/30 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-danger-400 transition hover:border-danger-500/60 hover:bg-gray-700">
+                                    {{ $row['student']->name }}
+                                    @if ($row['profile'] && ! $row['profile']->is_regular)
+                                        <span class="badge-warning shrink-0">Trial</span>
+                                    @endif
+                                    @if ($row['request']?->isPending())
+                                        <span class="badge-neutral shrink-0">Awaiting evaluation</span>
+                                    @endif
+                                    <span class="numeric text-danger-400/60">{{ $row['date']->format('M j') }}</span>
+                                </a>
+                            </li>
+                        @endforeach
+
+                        @if ($unmarked->count() > 10)
+                            <li class="self-center text-xs text-danger-400/70">
+                                +{{ $unmarked->count() - 10 }} more
+                            </li>
+                        @endif
+                    </ul>
+                </div>
+            </div>
+        </div>
+    @endif
+
     {{-- Unfiled reports are unpaid work, so this leads. --}}
     @if ($unreported->isNotEmpty())
         <div class="mt-6 rounded-card border border-warning-500/30 bg-warning-500/10 p-5">
