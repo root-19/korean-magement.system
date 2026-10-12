@@ -159,6 +159,23 @@ class StudentDeletionService
     }
 
     /**
+     * Delete several students outright, each exactly as delete() would.
+     *
+     * One transaction for the batch, so a failure part-way leaves every
+     * student where they were rather than half the list deleted.
+     *
+     * @param  Collection<int, User>  $students
+     */
+    public function deleteMany(User $admin, Collection $students, ?string $reason = null): int
+    {
+        return DB::transaction(function () use ($admin, $students, $reason) {
+            $students->each(fn (User $student) => $this->delete($admin, $student, $reason));
+
+            return $students->count();
+        });
+    }
+
+    /**
      * Refuse a request. The student is untouched.
      */
     public function reject(User $admin, StudentDeletionRequest $request, ?string $note = null): StudentDeletionRequest

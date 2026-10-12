@@ -8,6 +8,7 @@ use App\Enums\Role;
 use App\Enums\SessionStatus;
 use App\Enums\TeachingMethod;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\DestroyStudentsRequest;
 use App\Http\Requests\Admin\StoreStudentRequest;
 use App\Http\Requests\Admin\UpdateStudentRequest;
 use App\Models\AuditLog;
@@ -18,8 +19,10 @@ use App\Models\User;
 use App\Services\Enrollment\StudentDeletionService;
 use App\Services\Enrollment\StudentEnroller;
 use App\Services\Enrollment\StudentUpdater;
+use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -36,9 +39,13 @@ class StudentController extends Controller
         $search = trim((string) $request->query('q'));
         $filter = (string) $request->query('filter', 'active');
 
-        $students = StudentProfile::query()
-            // withTrashed: the join below does not apply the soft-delete scope, so
-            // an archived or deleted student's row IS returned. Without it here
+        $students = $this->filteredProfiles(
+            $search,
+            $filter,
+            $request->filled('instructor') ? (int) $request->query('instructor') : null,
+        )
+            // withTrashed: the join does not apply the soft-delete scope, so an
+            // archived or deleted student's row IS returned. Without it here
             // the relation would come back null for exactly those rows and the
             // view could not even build a link to them. Admins are the people who
             // need to see archived students.
@@ -48,12 +55,6 @@ class StudentController extends Controller
                 'user.schedules',
                 'instructor:id,name',
             ])
-            ->join('users', 'users.id', '=', 'student_profiles.user_id')
-            ->select('student_profiles.*')
-            ->when($search !== '', fn ($q) => $q->where('users.name', 'like', "%{$search}%"))
-            ->when($request->filled('instructor'), fn ($q) => $q
-                ->where('student_profiles.instructor_id', (int) $request->query('instructor')))
-            ->tap(fn ($q) => $this->applyFilter($q, $filter))
             ->orderBy('users.name')
             ->paginate(30)
             ->withQueryString();
@@ -274,7 +275,50 @@ class StudentController extends Controller
             ));
     }
 
+    /**
+     * Delete every student in the current view — all pages, not just the one
+     * on screen — with the same search and instructor filter applied.
+     *
+     * Each one goes through StudentDeletionService::delete(), so the outcome
+     * per student is identical to pressing Delete on their row.
+     */
+    public function destroyMany(DestroyStudentsRequest $request, StudentDeletionService $deletions): RedirectResponse
+    {
+        $filter = $request->validated('filter');
+        $search = trim((string) $request->validated('q'));
+        $instructorId = $request->validated('instructor');
+
+        $ids = $this->filteredProfiles($search, $filter, $instructorId ? (int) $instructorId : null)
+            ->pluck('student_profiles.user_id');
+
+        $students = User::query()->students()->whereIn('id', $ids)->get();
+
+        $deleted = $deletions->deleteMany($request->user(), $students);
+
+        return redirect()
+            ->route('admin.students.index', ['filter' => $filter])
+            ->with('success', sprintf(
+                '%d %s deleted. The classes taught to them are kept, so instructor payouts are unchanged.',
+                $deleted,
+                Str::plural('student', $deleted),
+            ));
+    }
+
     // ---------------------------------------------------------------- internals
+
+    /**
+     * The roster query behind both the list and its bulk delete, so the
+     * students deleted are exactly the students the admin was looking at.
+     */
+    private function filteredProfiles(string $search, string $filter, ?int $instructorId): Builder
+    {
+        return StudentProfile::query()
+            ->join('users', 'users.id', '=', 'student_profiles.user_id')
+            ->select('student_profiles.*')
+            ->when($search !== '', fn ($q) => $q->where('users.name', 'like', "%{$search}%"))
+            ->when($instructorId !== null, fn ($q) => $q->where('student_profiles.instructor_id', $instructorId))
+            ->tap(fn ($q) => $this->applyFilter($q, $filter));
+    }
 
     /**
      * Every student has exactly one profile; the pages that edit one cannot

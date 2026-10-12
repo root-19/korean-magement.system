@@ -61,6 +61,27 @@
                 @endforeach
             </select>
         </form>
+
+        {{-- Clears the whole view, every page, with the search and instructor
+             filter above applied — not just the 30 rows on screen. --}}
+        @if ($filter === 'no_sessions' && $students->total() > 0)
+            <form method="POST" action="{{ route('admin.students.destroy-many') }}" class="sm:ml-auto"
+                  onsubmit="return confirm('Delete all {{ $students->total() }} {{ Str::plural('student', $students->total()) }} in this list? They are removed from every list and can no longer sign in. Their classes and reports are kept.')">
+                @csrf
+                @method('DELETE')
+                <input type="hidden" name="filter" value="{{ $filter }}">
+                @if ($search !== '')
+                    <input type="hidden" name="q" value="{{ $search }}">
+                @endif
+                @if ($selectedInstructor)
+                    <input type="hidden" name="instructor" value="{{ $selectedInstructor }}">
+                @endif
+                <button type="submit" class="btn-danger btn-sm">
+                    <x-icon name="trash" class="h-4 w-4" />
+                    Delete all ({{ $students->total() }})
+                </button>
+            </form>
+        @endif
     </div>
 
     <x-card flush>

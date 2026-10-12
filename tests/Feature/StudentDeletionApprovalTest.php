@@ -507,6 +507,92 @@ class StudentDeletionApprovalTest extends TestCase
             ->assertDontSee('Delete A501 Leaving Student');
     }
 
+    // -------------------------------------------------------- bulk delete
+
+    #[Test]
+    public function an_admin_can_delete_every_student_with_no_sessions_left(): void
+    {
+        $this->profile->update(['sessions_remaining' => 0]);
+
+        $other = User::factory()->student()->create(['name' => 'A502 Also Finished']);
+        StudentProfile::factory()->create([
+            'user_id' => $other->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+            'sessions_remaining' => 0,
+        ]);
+
+        $continuing = User::factory()->student()->create(['name' => 'A503 Still Learning']);
+        StudentProfile::factory()->create([
+            'user_id' => $continuing->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+            'sessions_remaining' => 5,
+        ]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.students.index', ['filter' => 'no_sessions']))
+            ->assertOk()
+            ->assertSee('Delete all (2)');
+
+        $this->actingAs($this->admin)
+            ->delete(route('admin.students.destroy-many'), ['filter' => 'no_sessions'])
+            ->assertRedirect(route('admin.students.index', ['filter' => 'no_sessions']))
+            ->assertSessionHas('success');
+
+        $this->assertSoftDeleted('users', ['id' => $this->student->id]);
+        $this->assertSoftDeleted('users', ['id' => $other->id]);
+        $this->assertNotSoftDeleted('users', ['id' => $continuing->id]);
+        $this->assertSame(2, AuditLog::where('action', 'student.deleted')->count());
+    }
+
+    #[Test]
+    public function bulk_delete_respects_the_search_and_instructor_filter(): void
+    {
+        $this->profile->update(['sessions_remaining' => 0]);
+
+        $other = User::factory()->student()->create(['name' => 'A502 Someone Else']);
+        StudentProfile::factory()->create([
+            'user_id' => $other->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+            'sessions_remaining' => 0,
+        ]);
+
+        $this->actingAs($this->admin)->delete(route('admin.students.destroy-many'), [
+            'filter' => 'no_sessions',
+            'q' => 'Leaving',
+            'instructor' => $this->instructor->id,
+        ]);
+
+        $this->assertSoftDeleted('users', ['id' => $this->student->id]);
+        $this->assertNotSoftDeleted('users', ['id' => $other->id]);
+    }
+
+    #[Test]
+    public function bulk_delete_is_refused_outside_the_no_sessions_view(): void
+    {
+        $this->actingAs($this->admin)
+            ->delete(route('admin.students.destroy-many'), ['filter' => 'active'])
+            ->assertSessionHasErrors('filter');
+
+        $this->assertNotSoftDeleted('users', ['id' => $this->student->id]);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.students.index'))
+            ->assertOk()
+            ->assertDontSee('Delete all');
+    }
+
+    #[Test]
+    public function an_instructor_cannot_bulk_delete_students(): void
+    {
+        $this->profile->update(['sessions_remaining' => 0]);
+
+        $this->actingAs($this->instructor)
+            ->delete(route('admin.students.destroy-many'), ['filter' => 'no_sessions'])
+            ->assertForbidden();
+
+        $this->assertNotSoftDeleted('users', ['id' => $this->student->id]);
+    }
+
     // -------------------------------------------------------------- access
 
     #[Test]

@@ -210,6 +210,9 @@ Route::middleware(['auth', 'role:admin'])
         Route::get('/students/create', [AdminStudents::class, 'create'])->name('students.create');
         Route::post('/students', [AdminStudents::class, 'store'])->name('students.store');
 
+        // Deleting every student in the current list view at once.
+        Route::delete('/students', [AdminStudents::class, 'destroyMany'])->name('students.destroy-many');
+
         Route::get('/students/{student}', [AdminStudents::class, 'show'])
             ->withTrashed()
             ->name('students.show');
