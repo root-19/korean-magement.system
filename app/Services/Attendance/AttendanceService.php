@@ -316,6 +316,12 @@ class AttendanceService
      * Expressed as a delta between the old and new state so re-marking a slot
      * (present -> absent, absent -> postponed, ...) stays correct instead of
      * incrementing blindly the way the legacy helpers did.
+     *
+     * A plan that is used up has no class left to mark. This used to go through
+     * with sessions_remaining clamped at zero while the class was still counted
+     * as attended or student-absent, so a 20-class plan read 21 everywhere
+     * StudentProfile::sessionsPurchased() is shown. A slot already holding one of
+     * the plan's classes can still be corrected, and clearing is always allowed.
      */
     protected function syncCounters(
         User $student,
@@ -331,6 +337,13 @@ class AttendanceService
         }
 
         $wasConsumed = $this->consumesSession($from, $fromAbsentBy);
+
+        if ($to !== null && ! $wasConsumed && ! $profile->hasSessionsRemaining()) {
+            throw ValidationException::withMessages([
+                'status' => "{$student->name} has no classes left on their plan, so this class cannot be recorded.",
+            ]);
+        }
+
         $isConsumed = $this->consumesSession($to, $toAbsentBy);
 
         $wasCredited = $this->creditsSession($from, $fromAbsentBy);

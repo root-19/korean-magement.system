@@ -304,16 +304,20 @@ class AttendanceServiceTest extends TestCase
     }
 
     #[Test]
-    public function counters_never_go_negative(): void
+    public function a_used_up_plan_refuses_another_class(): void
     {
+        // Clamping remaining at zero while still counting the class read a
+        // 20-class plan as 21. See CompletedPlanTest.
         $this->profile->update(['sessions_remaining' => 0, 'sessions_attended' => 0]);
 
-        $this->service->mark($this->instructor, $this->student, '2025-08-04', SessionStatus::Present);
+        try {
+            $this->service->mark($this->instructor, $this->student, '2025-08-04', SessionStatus::Present);
+            $this->fail('A used-up plan accepted another class.');
+        } catch (ValidationException) {
+        }
 
-        $counters = $this->counters();
-
-        $this->assertSame(0, $counters['remaining'], 'clamped at zero, as the legacy GREATEST(x-1,0) did');
-        $this->assertSame(1, $counters['attended']);
+        $this->assertSame(['attended' => 0, 'remaining' => 0], $this->counters());
+        $this->assertSame(0, ClassSession::count());
     }
 
     // ------------------------------------------------------------ early classes

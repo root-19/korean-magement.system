@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Admin;
 use App\Http\Controllers\Controller;
 use App\Models\AttendanceRequest;
 use App\Models\AuditLog;
+use App\Services\Attendance\UnmarkedClasses;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -37,6 +38,18 @@ class AttendanceRequestController extends Controller
             'requests' => $requests,
             'filter' => $filter,
             'pendingCount' => AttendanceRequest::query()->pending()->count(),
+        ]);
+    }
+
+    /**
+     * Teachers with past classes still showing "For evaluation" on their roster —
+     * unmarked, and not yet asked about or asked and rejected.
+     */
+    public function teachers(UnmarkedClasses $unmarkedClasses): View
+    {
+        return view('admin.evaluations.teachers', [
+            'teachers' => $unmarkedClasses->awaitingEvaluation(),
+            'lookbackDays' => UnmarkedClasses::LOOKBACK_DAYS,
         ]);
     }
 

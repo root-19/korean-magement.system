@@ -165,6 +165,7 @@ final class Navigation
                         'clipboard',
                         badge: self::pendingEvaluationCount(),
                     ),
+                    self::item('For Evaluation', 'admin.evaluation-teachers.index', 'user-check'),
                     self::item('Teacher Schedules', 'admin.schedules.index', 'clock'),
                     self::item('Bookings', 'admin.bookings.index', 'book-open'),
                 ],

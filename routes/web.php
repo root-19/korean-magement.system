@@ -253,6 +253,7 @@ Route::middleware(['auth', 'role:admin'])
 
         // Evaluation queue for late attendance
         Route::get('/evaluations', [AdminEvaluations::class, 'index'])->name('evaluations.index');
+        Route::get('/evaluations/teachers', [AdminEvaluations::class, 'teachers'])->name('evaluation-teachers.index');
         Route::patch('/evaluations/{evaluation}', [AdminEvaluations::class, 'decide'])->name('evaluations.decide');
 
         // Learning materials handed out to instructors

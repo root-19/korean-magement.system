@@ -426,12 +426,11 @@ class InstructorPagesTest extends TestCase
     }
 
     #[Test]
-    public function a_finished_student_is_held_for_24_hours_after_their_last_marking(): void
+    public function a_recent_marking_does_not_hold_a_finished_student_on_a_later_day(): void
     {
-        // Marking a student's last class takes them to 0 the instant it saves,
-        // so hiding them on the spot would pull the row out from under the
-        // instructor who just marked it. Yesterday's marking still lists them
-        // today; tomorrow it will not.
+        // A 24-hour hold used to list them here, beside Present and Absent for a
+        // class the plan no longer has — and drop them again an hour later. Their
+        // final class keeps its own day; see CompletedPlanTest.
         $student = $this->finishedStudent();
 
         ClassSession::factory()->present()->create([
@@ -439,24 +438,6 @@ class InstructorPagesTest extends TestCase
             'student_id' => $student->id,
             'scheduled_date' => now()->subDay()->toDateString(),
             'marked_at' => now()->subHours(2),
-        ]);
-
-        $this->actingAs($this->instructor)
-            ->get(route('instructor.classes.index'))
-            ->assertOk()
-            ->assertSee('A997 Finished');
-    }
-
-    #[Test]
-    public function the_hold_lapses_once_the_last_marking_is_a_day_old(): void
-    {
-        $student = $this->finishedStudent();
-
-        ClassSession::factory()->present()->create([
-            'instructor_id' => $this->instructor->id,
-            'student_id' => $student->id,
-            'scheduled_date' => now()->subDay()->toDateString(),
-            'marked_at' => now()->subDay()->subMinute(),
         ]);
 
         $this->actingAs($this->instructor)

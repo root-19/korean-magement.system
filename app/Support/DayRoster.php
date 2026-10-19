@@ -27,8 +27,8 @@ use Illuminate\Support\Facades\DB;
  * was then all it took to list someone the instructor no longer teaches.
  *
  * Students who have used up every prepaid session are then dropped — see
- * withoutFinishedStudents, which holds their row for 24 hours after the class
- * that finished them so the report can still be filed from it.
+ * withoutFinishedStudents, which keeps only a class of theirs already recorded
+ * on the date, so the report can still be filed from it.
  *
  * Group 1 is trimmed at both ends. A slot outside the student's enrolment dates
  * is not a class because they were not a student yet — see EnrollmentWindow. A
@@ -154,7 +154,6 @@ final class DayRoster
 
         $rows = self::withoutFinishedStudents(
             $rows->filter(fn (array $row) => $row['student'] !== null),
-            $instructorId,
         );
 
         $rows = self::withoutFullyBookedStudents(
@@ -208,39 +207,25 @@ final class DayRoster
      * same way, on both the dashboard and the class list.
      *
      * Marking the last class takes sessions_remaining to 0 the instant it saves,
-     * so hiding on that alone would pull the row out from under the instructor
-     * who just marked it — and the report is filed from that row. Two things keep
-     * a finished student on a day:
+     * and the report is filed from that row, so a finished student keeps a day
+     * that holds a class of theirs already recorded on it.
      *
-     *   1. a record of their own on this date — their final class, or a makeup
-     *      that landed here;
-     *   2. a marking made in the last 24 hours, wherever it sits.
+     * Nothing else keeps them. Any other row — a timetable slot, a cleared
+     * marking, a makeup pointed here — has no class left to spend on it, yet it
+     * rendered Present and Absent beside "0 left", and marking it counted a class
+     * past the end of the plan. A 24-hour hold after any marking, and an
+     * exemption for makeups, used to keep such rows, so the same student came
+     * and went from the roster by the hour. AttendanceService refuses that
+     * marking now; this keeps it from being offered.
      *
      * @param  Collection<int, array<string, mixed>>  $rows
      * @return Collection<int, array<string, mixed>>
      */
-    private static function withoutFinishedStudents(Collection $rows, int $instructorId): Collection
+    private static function withoutFinishedStudents(Collection $rows): Collection
     {
-        $finished = $rows->filter(fn (array $row) => ! ($row['profile']?->hasSessionsRemaining() ?? false)
-            && $row['session']?->status === null
-            && $row['makeup_for'] === null);
-
-        if ($finished->isEmpty()) {
-            return $rows;
-        }
-
-        $justMarked = ClassSession::query()
-            ->where('instructor_id', $instructorId)
-            ->whereIn('student_id', $finished->keys())
-            ->whereNotNull('status')
-            ->where('marked_at', '>=', CarbonImmutable::now()->subDay())
-            ->pluck('student_id')
-            ->map(fn ($id) => (int) $id)
-            ->all();
-
         return $rows->reject(
-            fn (array $row, int $studentId) => $finished->has($studentId)
-                && ! in_array($studentId, $justMarked, true)
+            fn (array $row) => ! ($row['profile']?->hasSessionsRemaining() ?? false)
+                && $row['session']?->status === null
         );
     }
 
@@ -274,8 +259,7 @@ final class DayRoster
      *
      * Only bare timetable rows go. A row backed by a session, or one that is
      * itself the makeup, is a record of something and stays whatever the count
-     * says. And a student is only dropped when a makeup is actually owed, so the
-     * 24-hour grace in withoutFinishedStudents is left alone.
+     * says. And a student is only dropped when a makeup is actually owed.
      *
      * @param  Collection<array-key, array<string, mixed>>  $rows
      * @param  Collection<int, int>  $owed  makeup DAYS per student

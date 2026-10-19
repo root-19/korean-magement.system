@@ -8,6 +8,7 @@ use App\Enums\SessionStatus;
 use App\Http\Controllers\Controller;
 use App\Models\ClassSession;
 use App\Models\StudentProfile;
+use App\Services\Attendance\UnmarkedClasses;
 use App\Services\Earnings\EarningsCalculator;
 use App\Support\DayRoster;
 use App\Support\EnrollmentWindow;
@@ -27,10 +28,10 @@ use Illuminate\View\View;
  */
 class DashboardController extends Controller
 {
-    /** How many past days the "no attendance recorded" panel looks back over. */
-    private const UNMARKED_LOOKBACK_DAYS = 7;
-
-    public function __construct(private readonly EarningsCalculator $earnings) {}
+    public function __construct(
+        private readonly EarningsCalculator $earnings,
+        private readonly UnmarkedClasses $unmarkedClasses,
+    ) {}
 
     public function __invoke(Request $request): View
     {
@@ -73,7 +74,7 @@ class DashboardController extends Controller
 
             'calendar' => $this->calendar($instructor->id, $month),
             'month' => $month,
-            'unmarked' => $this->unmarkedClasses($instructor->id),
+            'unmarked' => $this->unmarkedClasses->forInstructor($instructor->id),
             'unreported' => $this->unreportedSessions($instructor->id, $window),
             'weekBreakdown' => $this->weekBreakdown($instructor->id, $window),
         ]);
@@ -121,6 +122,7 @@ class DashboardController extends Controller
 
         $timetabled = $this->timetabledStudentsByWeekday($instructorId);
         $makeups = $this->makeupStudentsByDate($instructorId, $start, $end);
+        $finished = $this->finishedStudentIds($instructorId);
         $today = CarbonImmutable::today();
 
         $cells = [];
@@ -132,7 +134,12 @@ class DashboardController extends Controller
 
         for ($day = $start; $day->lte($end); $day = $day->addDay()) {
             $dateString = $day->toDateString();
-            $rows = $recorded->get($dateString, collect());
+
+            // A finished student's unmarked row is not on the roster — see
+            // DayRoster::withoutFinishedStudents — so it is not a class here.
+            $rows = $recorded->get($dateString, collect())->reject(
+                fn ($row) => $row->status === null && in_array((int) $row->student_id, $finished, true)
+            );
 
             // A makeup keeps its row on the date it was postponed FROM, so the
             // day it lands on holds nothing until the class is marked. Counting
@@ -141,6 +148,7 @@ class DashboardController extends Controller
             $pending = array_diff(
                 $makeups[$dateString] ?? [],
                 $rows->pluck('student_id')->map(fn ($id) => (int) $id)->all(),
+                $finished,
             );
 
             $isUpcoming = $day->gt($today);
@@ -250,6 +258,21 @@ class DashboardController extends Controller
     }
 
     /**
+     * The instructor's live students who have used up every prepaid session.
+     *
+     * @return array<int, int>
+     */
+    private function finishedStudentIds(int $instructorId): array
+    {
+        return StudentProfile::forInstructor($instructorId)
+            ->teachable()
+            ->where('sessions_remaining', '<=', 0)
+            ->pluck('user_id')
+            ->map(fn ($id) => (int) $id)
+            ->all();
+    }
+
+    /**
      * Makeup classes landing in this month, by date.
      *
      * A postponed class is rescheduled to a date its student may not normally
@@ -275,28 +298,6 @@ class DashboardController extends Controller
             ->groupBy(fn ($session) => $session->rescheduled_date->toDateString())
             ->map(fn ($sessions) => $sessions->pluck('student_id')->map(fn ($id) => (int) $id)->unique()->all())
             ->all();
-    }
-
-    /**
-     * Past classes with no Present, Absent or Postponed recorded, newest first.
-     *
-     * Built from DayRoster rather than a query of its own, so every entry opens
-     * onto the same row on that date's roster — including timetabled classes
-     * that never got a session row at all, which a class_sessions query misses.
-     * Today is left out: it is already on the page, still markable.
-     *
-     * @return Collection<int, array<string, mixed>>
-     */
-    private function unmarkedClasses(int $instructorId): Collection
-    {
-        $today = CarbonImmutable::today();
-
-        return collect(range(1, self::UNMARKED_LOOKBACK_DAYS))
-            ->map(fn (int $daysAgo) => $today->subDays($daysAgo))
-            ->flatMap(fn (CarbonImmutable $date) => DayRoster::for($instructorId, $date)
-                ->filter(fn (array $row) => $row['session']?->status === null)
-                ->map(fn (array $row) => $row + ['date' => $date]))
-            ->values();
     }
 
     /**
