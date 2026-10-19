@@ -4,6 +4,7 @@ namespace App\Services\Attendance;
 
 use App\Enums\Party;
 use App\Enums\SessionStatus;
+use App\Enums\TeachingMethod;
 use App\Models\ClassSession;
 use App\Models\User;
 use App\Services\Earnings\EarningsCalculator;
@@ -22,7 +23,9 @@ use Illuminate\Support\Collection;
  *   minutes used  = Present classes × the student's class length
  *
  * The class length is the student's current `learning_time`, the same figure
- * EarningsCalculator pays on.
+ * EarningsCalculator pays on. Minutes are also split by class type — Audio,
+ * Video (Kids), Video (Adults) — from the student's `teaching_method`; a blank
+ * one counts as Audio, the rate payroll bills it at.
  *
  * Earnings come from EarningsCalculator, not from the counts here: a class pays
  * only once its report is filed, trials and teacher absences have their own
@@ -45,8 +48,8 @@ class CutoffAudit
             ->leftJoin('student_profiles as sp', 'sp.user_id', '=', 'class_sessions.student_id')
             ->whereBetween('class_sessions.paid_date', [$window->startDate(), $window->endDate()])
             ->whereNotNull('class_sessions.status')
-            ->groupBy('class_sessions.instructor_id', 'class_sessions.paid_date', 'class_sessions.status', 'class_sessions.absent_by')
-            ->selectRaw('class_sessions.instructor_id, class_sessions.paid_date, class_sessions.status, class_sessions.absent_by')
+            ->groupBy('class_sessions.instructor_id', 'class_sessions.paid_date', 'class_sessions.status', 'class_sessions.absent_by', 'sp.teaching_method')
+            ->selectRaw('class_sessions.instructor_id, class_sessions.paid_date, class_sessions.status, class_sessions.absent_by, sp.teaching_method')
             ->selectRaw('COUNT(*) as classes, SUM(COALESCE(sp.learning_time, 0)) as minutes')
             ->toBase()
             ->get();
@@ -96,7 +99,14 @@ class CutoffAudit
         $money = collect(['gross', 'deductions', 'earned'])
             ->mapWithKeys(fn (string $key) => [$key => round((float) $teachers->sum($key), 2)]);
 
-        return $counts->merge($money)->all();
+        $byMethod = collect(TeachingMethod::cases())->mapWithKeys(fn (TeachingMethod $method) => [
+            $method->value => [
+                'total' => (int) $teachers->sum("by_method.{$method->value}.total"),
+                'used' => (int) $teachers->sum("by_method.{$method->value}.used"),
+            ],
+        ]);
+
+        return $counts->merge($money)->put('by_method', $byMethod->all())->all();
     }
 
     /**
@@ -129,10 +139,13 @@ class CutoffAudit
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, mixed>
      */
     private function tally(Collection $rows): array
     {
+        $method = fn (object $row) => (TeachingMethod::tryFrom((string) $row->teaching_method) ?? TeachingMethod::Audio)->value;
+        $present = fn (object $row) => $row->status === SessionStatus::Present->value;
+
         $count = fn (SessionStatus $status, ?Party $by = null) => (int) $rows
             ->filter(fn (object $row) => $row->status === $status->value
                 && ($by === null || $row->absent_by === $by->value))
@@ -145,7 +158,15 @@ class CutoffAudit
             'teacher_absent' => $count(SessionStatus::Absent, Party::Teacher),
             'postponed' => $count(SessionStatus::Postponed),
             'total_minutes' => (int) $rows->sum('minutes'),
-            'used_minutes' => (int) $rows->where('status', SessionStatus::Present->value)->sum('minutes'),
+            'used_minutes' => (int) $rows->filter($present)->sum('minutes'),
+            'by_method' => collect(TeachingMethod::cases())->mapWithKeys(function (TeachingMethod $case) use ($rows, $method, $present) {
+                $ofType = $rows->filter(fn (object $row) => $method($row) === $case->value);
+
+                return [$case->value => [
+                    'total' => (int) $ofType->sum('minutes'),
+                    'used' => (int) $ofType->filter($present)->sum('minutes'),
+                ]];
+            })->all(),
         ];
     }
 }

@@ -48,6 +48,13 @@
         <x-stat-card label="Minutes used" value="{{ number_format($totals['used_minutes']) }}" icon="check-circle"
                      hint="Present classes only" />
 
+        @foreach (App\Enums\TeachingMethod::cases() as $method)
+            <x-stat-card :label="$method->label().' minutes'"
+                         value="{{ number_format($totals['by_method'][$method->value]['total']) }}"
+                         :icon="$method->isVideo() ? 'video' : 'chat'"
+                         hint="{{ number_format($totals['by_method'][$method->value]['used']) }} used (Present)" />
+        @endforeach
+
         <x-stat-card label="Present" value="{{ number_format($totals['present']) }}" icon="check" tone="success" />
 
         <x-stat-card label="Absent" value="{{ number_format($totals['absent']) }}" icon="x" tone="danger"
@@ -95,8 +102,7 @@
     <x-card class="mt-6" flush>
         <x-slot:title>Teachers</x-slot:title>
         <x-slot:subtitle>
-            Minutes use each student's class length. Classes are counted in the cut-off their payslip falls in.
-            Earned is the live payroll figure: a class pays once its report is filed.
+            No class type set counts as Audio, as payroll pays it. Earned is the live payroll figure: a class pays once its report is filed.
         </x-slot:subtitle>
 
         @if ($teachers->isEmpty())
@@ -107,28 +113,44 @@
             <div class="table-wrap">
                 <table class="table">
                     <thead>
+                        {{-- Grouped so the column labels can stay short: ten columns
+                             with full labels ran past the card at desktop width. --}}
                         <tr>
-                            <th>Teacher</th>
-                            <th class="text-right">Total minutes</th>
-                            <th class="text-right">Minutes used</th>
-                            <th class="text-right">Present</th>
+                            <th rowspan="2" class="align-bottom">Teacher</th>
+                            <th colspan="5" class="border-l border-gray-700 text-center">Minutes</th>
+                            <th colspan="3" class="border-l border-gray-700 text-center">Classes</th>
+                            <th rowspan="2" class="border-l border-gray-700 text-right align-bottom">Earned</th>
+                        </tr>
+                        <tr>
+                            @foreach (App\Enums\TeachingMethod::cases() as $method)
+                                <th @class(['text-right', 'border-l border-gray-700' => $loop->first]) title="{{ $method->label() }} minutes">
+                                    {{ str_replace(['(', ')'], '', $method->label()) }}
+                                </th>
+                            @endforeach
+                            <th class="text-right">Total</th>
+                            <th class="text-right" title="Present classes only">Used</th>
+                            <th class="border-l border-gray-700 text-right">Present</th>
                             <th class="text-right">Absent</th>
                             <th class="text-right">Postponed</th>
-                            <th class="text-right">Earned</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($teachers as $row)
                             <tr>
                                 <td class="whitespace-nowrap font-medium text-white">{{ $row['name'] }}</td>
-                                <td class="numeric text-right">{{ number_format($row['total_minutes']) }}</td>
+                                @foreach (App\Enums\TeachingMethod::cases() as $method)
+                                    <td class="numeric text-right text-gray-300">
+                                        {{ number_format($row['by_method'][$method->value]['total']) }}
+                                    </td>
+                                @endforeach
+                                <td class="numeric text-right font-medium text-white">{{ number_format($row['total_minutes']) }}</td>
                                 <td class="numeric text-right">{{ number_format($row['used_minutes']) }}</td>
                                 <td class="numeric text-right">{{ $row['present'] }}</td>
                                 <td class="numeric text-right">
                                     {{ $row['absent'] }}
-                                    @if ($row['absent'] > 0)
-                                        <span class="block text-xs text-gray-500">
-                                            {{ $row['student_absent'] }} student · {{ $row['teacher_absent'] }} teacher
+                                    @if ($row['teacher_absent'] > 0)
+                                        <span class="block whitespace-nowrap text-xs text-danger-400">
+                                            {{ $row['teacher_absent'] }} teacher
                                         </span>
                                     @endif
                                 </td>
@@ -143,8 +165,11 @@
                         @endforeach
                     </tbody>
                     <tfoot>
-                        <tr class="border-t border-gray-700 font-semibold text-white">
+                        <tr class="border-t border-gray-700 font-semibold text-white [&>td]:px-4 [&>td]:py-3">
                             <td>Total</td>
+                            @foreach (App\Enums\TeachingMethod::cases() as $method)
+                                <td class="numeric text-right">{{ number_format($totals['by_method'][$method->value]['total']) }}</td>
+                            @endforeach
                             <td class="numeric text-right">{{ number_format($totals['total_minutes']) }}</td>
                             <td class="numeric text-right">{{ number_format($totals['used_minutes']) }}</td>
                             <td class="numeric text-right">{{ $totals['present'] }}</td>

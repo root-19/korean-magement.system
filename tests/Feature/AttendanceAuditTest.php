@@ -3,6 +3,7 @@
 namespace Tests\Feature;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\TeachingMethod;
 use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Models\User;
@@ -46,8 +47,8 @@ class AttendanceAuditTest extends TestCase
         $this->ana = User::factory()->instructor()->create(['name' => 'Teacher Ana']);
         $this->ben = User::factory()->instructor()->create(['name' => 'Teacher Ben']);
 
-        $short = $this->student($this->ana, 25);
-        $long = $this->student($this->ben, 50);
+        $short = $this->student($this->ana, 25, TeachingMethod::Audio);
+        $long = $this->student($this->ben, 50, TeachingMethod::VideoAdults);
 
         $this->classOn($this->ana, $short, '2026-09-14')->present()->create();
         $this->classOn($this->ana, $short, '2026-09-15')->present()->create();
@@ -81,7 +82,7 @@ class AttendanceAuditTest extends TestCase
         CarbonImmutable::setTestNow($moment);
     }
 
-    private function student(User $instructor, int $minutes): User
+    private function student(User $instructor, int $minutes, ?TeachingMethod $method): User
     {
         $student = User::factory()->student()->create();
 
@@ -90,6 +91,7 @@ class AttendanceAuditTest extends TestCase
             'instructor_id' => $instructor->id,
             'enrollment_status' => EnrollmentStatus::Approved,
             'learning_time' => $minutes,
+            'teaching_method' => $method,
         ]);
 
         return $student;
@@ -122,7 +124,39 @@ class AttendanceAuditTest extends TestCase
             'postponed' => 1,
             'total_minutes' => 5 * 25 + 2 * 50,
             'used_minutes' => 3 * 25 + 1 * 50,
-        ], array_diff_key($totals, array_flip(['gross', 'deductions', 'earned'])));
+        ], array_diff_key($totals, array_flip(['gross', 'deductions', 'earned', 'by_method'])));
+    }
+
+    #[Test]
+    public function minutes_are_split_by_class_type(): void
+    {
+        // A Video (Kids) student, and one with no class type set: payroll pays
+        // the blank one at the Audio rate, so its minutes count as Audio.
+        $kids = $this->student($this->ben, 30, TeachingMethod::VideoKids);
+        $blank = $this->student($this->ben, 20, null);
+        $this->classOn($this->ben, $kids, '2026-09-14')->present()->create();
+        $this->classOn($this->ben, $kids, '2026-09-15')->postponed()->create(['rescheduled_date' => '2026-09-22']);
+        $this->classOn($this->ben, $blank, '2026-09-16')->present()->create();
+
+        $view = $this->page();
+        $byMethod = $view->viewData('totals')['by_method'];
+        $ben = $view->viewData('teachers')->firstWhere('name', 'Teacher Ben');
+
+        $this->assertSame([
+            'audio' => ['total' => 125 + 20, 'used' => 75 + 20],
+            'video_kids' => ['total' => 60, 'used' => 30],
+            'video_adults' => ['total' => 100, 'used' => 50],
+        ], $byMethod);
+
+        $this->assertSame(['total' => 20, 'used' => 20], $ben['by_method']['audio']);
+        $this->assertSame(['total' => 60, 'used' => 30], $ben['by_method']['video_kids']);
+        $this->assertSame(
+            array_sum(array_column($ben['by_method'], 'total')),
+            $ben['total_minutes'],
+            'the three types add up to the total',
+        );
+
+        $view->assertSee('Video (Kids) minutes')->assertSee('Video (Adults) minutes')->assertSee('Audio minutes');
     }
 
     #[Test]
