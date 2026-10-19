@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
-@section('title', 'Enrolments')
-@section('heading', 'Enrolments')
-@section('subheading', $enrollments->total().' '.$status->label().' '.Str::plural('enrolment', $enrollments->total()))
+@section('title', __('Enrolments'))
+@section('heading', __('Enrolments'))
+@section('subheading', trans_choice(':count :status enrolment|:count :status enrolments', $enrollments->total(), ['status' => $status->label()]))
 
 @section('content')
     {{-- Status tabs with live counts. --}}
@@ -25,10 +25,10 @@
     @if ($enrollments->isEmpty())
         <x-card>
             <x-empty-state icon="check-circle"
-                           title="Nothing {{ strtolower($status->label()) }}"
-                           message="{{ $status === App\Enums\EnrollmentStatus::Pending
-                               ? 'Every enrolment has been decided. Instructors can enrol new students at any time.'
-                               : 'No enrolments in this state.' }}" />
+                           :title="__('Nothing :status', ['status' => mb_strtolower($status->label())])"
+                           :message="$status === App\Enums\EnrollmentStatus::Pending
+                               ? __('Every enrolment has been decided. Instructors can enrol new students at any time.')
+                               : __('No enrolments in this state.')" />
         </x-card>
     @else
         <div class="space-y-4">
@@ -47,24 +47,24 @@
                                     {{ $enrollment->enrollment_status->label() }}
                                 </span>
                                 @if ($student && ! $student->is_active)
-                                    <span class="badge-neutral">Deactivated</span>
+                                    <span class="badge-neutral">{{ __('Deactivated') }}</span>
                                 @endif
                             </div>
 
                             <p class="mt-1 text-sm text-gray-400">
-                                Enrolled by
+                                {{ __('Enrolled by') }}
                                 <span class="font-medium text-gray-300">
-                                    {{ $enrollment->instructor?->name ?? 'nobody — unassigned' }}
+                                    {{ $enrollment->instructor?->name ?? __('nobody — unassigned') }}
                                 </span>
-                                · {{ $enrollment->created_at?->format('M j, Y') }}
+                                · {{ $enrollment->created_at?->translatedFormat('M j, Y') }}
                             </p>
 
                             <dl class="mt-3 grid gap-x-6 gap-y-2 text-sm sm:grid-cols-2 lg:grid-cols-4">
                                 @foreach ([
-                                    'Type' => $enrollment->teaching_method?->label() ?? '—',
-                                    'Duration' => $enrollment->learning_time ? $enrollment->learning_time.' min' : '—',
-                                    'Sessions' => $enrollment->sessions_remaining,
-                                    'Starts' => $enrollment->start_date?->format('M j, Y') ?? '—',
+                                    __('Type') => $enrollment->teaching_method?->label() ?? '—',
+                                    __('Duration') => $enrollment->learning_time ? __(':minutes min', ['minutes' => $enrollment->learning_time]) : '—',
+                                    __('Sessions') => $enrollment->sessions_remaining,
+                                    __('Starts') => $enrollment->start_date?->translatedFormat('M j, Y') ?? '—',
                                 ] as $label => $value)
                                     <div>
                                         <dt class="text-xs uppercase tracking-wide text-gray-500">{{ $label }}</dt>
@@ -85,7 +85,7 @@
 
                             @if ($enrollment->rejection_reason)
                                 <p class="mt-3 rounded-lg bg-danger-500/10 px-3 py-2 text-xs text-danger-400">
-                                    Rejected: {{ $enrollment->rejection_reason }}
+                                    {{ __('Rejected: :reason', ['reason' => $enrollment->rejection_reason]) }}
                                 </p>
                             @endif
                         </div>
@@ -99,12 +99,12 @@
                                         @method('PATCH')
                                         <button type="submit" class="btn-primary w-full">
                                             <x-icon name="check" class="h-4 w-4" />
-                                            Approve
+                                            {{ __('Approve') }}
                                         </button>
                                     </form>
 
                                     <button type="button" x-on:click="rejecting = true" class="btn-secondary">
-                                        Reject
+                                        {{ __('Reject') }}
                                     </button>
                                 </div>
 
@@ -119,18 +119,18 @@
                                     @method('PATCH')
 
                                     <label for="reason-{{ $enrollment->id }}" class="form-label !text-xs">
-                                        Reason (optional)
+                                        {{ __('Reason (optional)') }}
                                     </label>
                                     <textarea id="reason-{{ $enrollment->id }}"
                                               name="reason"
                                               rows="2"
                                               class="form-textarea text-xs"
-                                              placeholder="Why is this being rejected?"></textarea>
+                                              placeholder="{{ __('Why is this being rejected?') }}"></textarea>
 
                                     <div class="flex gap-2">
-                                        <button type="submit" class="btn-danger btn-sm flex-1">Confirm</button>
+                                        <button type="submit" class="btn-danger btn-sm flex-1">{{ __('Confirm') }}</button>
                                         <button type="button" x-on:click="rejecting = false" class="btn-ghost btn-sm">
-                                            Cancel
+                                            {{ __('Cancel') }}
                                         </button>
                                     </div>
                                 </form>
@@ -138,13 +138,13 @@
                                 <form method="POST" action="{{ route('admin.enrollments.reinstate', $enrollment) }}">
                                     @csrf
                                     @method('PATCH')
-                                    <button type="submit" class="btn-secondary w-full">Reinstate</button>
+                                    <button type="submit" class="btn-secondary w-full">{{ __('Reinstate') }}</button>
                                 </form>
                             @endif
 
                             @if ($student)
                                 <a href="{{ route('admin.students.show', $student) }}" class="btn-ghost btn-sm">
-                                    View student
+                                    {{ __('View student') }}
                                 </a>
                             @endif
                         </div>
@@ -152,9 +152,9 @@
 
                     @if ($enrollment->enrollment_decided_at)
                         <p class="mt-3 border-t border-gray-700 pt-3 text-xs text-gray-500">
-                            Decided {{ $enrollment->enrollment_decided_at->format('M j, Y g:i A') }}
+                            {{ __('Decided :date', ['date' => $enrollment->enrollment_decided_at->translatedFormat('M j, Y g:i A')]) }}
                             @if ($enrollment->decidedBy)
-                                by {{ $enrollment->decidedBy->name }}
+                                {{ __('by :name', ['name' => $enrollment->decidedBy->name]) }}
                             @endif
                         </p>
                     @endif

@@ -38,8 +38,8 @@
                     <div class="flex-1">
                         <p class="font-semibold">
                             {{ $errors->count() === 1
-                                ? 'There is a problem with this form'
-                                : "There are {$errors->count()} problems with this form" }}
+                                ? __('There is a problem with this form')
+                                : __('There are :count problems with this form', ['count' => $errors->count()]) }}
                         </p>
                         <ul class="mt-1.5 list-inside list-disc space-y-0.5">
                             @foreach ($errors->all() as $error)

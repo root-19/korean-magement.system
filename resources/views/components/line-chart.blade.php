@@ -90,7 +90,7 @@
     <div class="overflow-x-auto">
     <div class="relative min-w-[560px]" x-data="{ active: null, points: @js($points) }" x-on:mouseleave="active = null">
         <svg viewBox="0 0 {{ $width }} {{ $height }}" class="block h-auto w-full" role="img"
-             aria-label="{{ collect($series)->pluck('label')->implode(', ') }} per day">
+             aria-label="{{ collect($series)->pluck('label')->implode(', ') }} {{ __('per day') }}">
             @foreach ($ticks as $tick)
                 <line x1="{{ $pad['left'] }}" x2="{{ $width - $pad['right'] }}" y1="{{ $y($tick) }}" y2="{{ $y($tick) }}"
                       stroke="#374151" stroke-width="1" />
@@ -129,7 +129,7 @@
                 <rect x="{{ $x($i) - ($count > 1 ? $plotW / ($count - 1) / 2 : $plotW / 2) }}" y="0"
                       width="{{ $count > 1 ? $plotW / ($count - 1) : $plotW }}" height="{{ $height }}"
                       fill="transparent" tabindex="0" class="focus:outline-none"
-                      aria-label="{{ ($tooltipLabels ?? $labels)[$i] }}: {{ collect($series)->map(fn ($s) => $s['label'].' '.($s['values'][$i] ?? 'no data yet'))->implode(', ') }}"
+                      aria-label="{{ ($tooltipLabels ?? $labels)[$i] }}: {{ collect($series)->map(fn ($s) => $s['label'].' '.($s['values'][$i] ?? __('no data yet')))->implode(', ') }}"
                       x-on:mouseenter="active = {{ $i }}" x-on:focus="active = {{ $i }}" x-on:blur="active = null" />
             @endforeach
         </svg>

@@ -86,11 +86,19 @@ final class PayoutWindow implements Arrayable
     }
 
     /** "Aug 2 – Aug 8, 2025" */
-    public function label(): string
+    /**
+     * In the current language unless one is given. Anything stored — an audit
+     * log entry — asks for 'en', so the record does not depend on which
+     * language the admin had the pages in.
+     */
+    public function label(?string $locale = null): string
     {
-        return $this->start->isSameYear($this->end)
-            ? $this->start->format('M j').' – '.$this->end->format('M j, Y')
-            : $this->start->format('M j, Y').' – '.$this->end->format('M j, Y');
+        $start = $locale === null ? $this->start : $this->start->locale($locale);
+        $end = $locale === null ? $this->end : $this->end->locale($locale);
+
+        return $start->isSameYear($end)
+            ? $start->translatedFormat('M j').' – '.$end->translatedFormat('M j, Y')
+            : $start->translatedFormat('M j, Y').' – '.$end->translatedFormat('M j, Y');
     }
 
     /** "2025-W31" — stable key for caching and query strings. */

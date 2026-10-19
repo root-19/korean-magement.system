@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
-@section('title', 'Bookings')
-@section('heading', 'Bookings')
-@section('subheading', 'Trial requests across every instructor')
+@section('title', __('Bookings'))
+@section('heading', __('Bookings'))
+@section('subheading', __('Trial requests across every instructor'))
 
 @section('content')
     <div class="mb-4 flex flex-wrap items-center gap-3">
@@ -13,7 +13,7 @@
                    'bg-gray-700 text-brand-400' => $status === null,
                    'text-gray-400 hover:text-white' => $status !== null,
                ])>
-                All
+                {{ __('All') }}
                 <span class="numeric rounded-full bg-gray-900/60 px-1.5 py-0.5 text-[10px]">{{ $counts['all'] }}</span>
             </a>
 
@@ -37,8 +37,8 @@
                 <input type="hidden" name="status" value="{{ $status->value }}">
             @endif
             <select name="instructor" onchange="this.form.submit()" class="form-select !w-auto text-xs"
-                    aria-label="Filter by instructor">
-                <option value="">All instructors</option>
+                    aria-label="{{ __('Filter by instructor') }}">
+                <option value="">{{ __('All instructors') }}</option>
                 @foreach ($instructors as $instructor)
                     <option value="{{ $instructor->id }}" @selected((int) $selectedInstructor === $instructor->id)>
                         {{ $instructor->name }}
@@ -51,28 +51,28 @@
     <x-card flush>
         @if ($bookings->isEmpty())
             <x-empty-state icon="book-open"
-                           title="No booking requests"
-                           message="Trial requests submitted from instructor profile pages arrive here." />
+                           :title="__('No booking requests')"
+                           :message="__('Trial requests submitted from instructor profile pages arrive here.')" />
         @else
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Requested for</th>
-                            <th>Prospect</th>
-                            <th>Instructor</th>
-                            <th>Type</th>
-                            <th class="text-center">Sessions</th>
-                            <th>Status</th>
+                            <th>{{ __('Requested for') }}</th>
+                            <th>{{ __('Prospect') }}</th>
+                            <th>{{ __('Instructor') }}</th>
+                            <th>{{ __('Type') }}</th>
+                            <th class="text-center">{{ __('Sessions') }}</th>
+                            <th>{{ __('Status') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($bookings as $booking)
                             <tr>
                                 <td class="numeric whitespace-nowrap">
-                                    {{ $booking->session_date->format('D, M j, Y') }}
+                                    {{ $booking->session_date->translatedFormat('D, M j, Y') }}
                                     <span class="block text-xs text-gray-500">
-                                        {{ \Carbon\Carbon::parse($booking->session_time)->format('g:i A') }}
+                                        {{ \Carbon\Carbon::parse($booking->session_time)->translatedFormat('g:i A') }}
                                     </span>
                                 </td>
 
@@ -103,7 +103,7 @@
                                 <td>
                                     <span class="{{ $booking->status->badgeClass() }}">{{ $booking->status->label() }}</span>
                                     @if ($booking->isConverted())
-                                        <span class="badge-brand mt-1 block w-fit">Enrolled</span>
+                                        <span class="badge-brand mt-1 block w-fit">{{ __('Enrolled') }}</span>
                                     @endif
                                 </td>
                             </tr>
@@ -119,7 +119,6 @@
     </x-card>
 
     <p class="mt-4 text-xs text-gray-500">
-        Instructors confirm or cancel their own bookings from their Bookings page. This
-        view is read-only.
+        {{ __('Instructors confirm or cancel their own bookings from their Bookings page. This view is read-only.') }}
     </p>
 @endsection

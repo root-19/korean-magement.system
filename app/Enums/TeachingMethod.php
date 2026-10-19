@@ -11,9 +11,9 @@ enum TeachingMethod: string
     public function label(): string
     {
         return match ($this) {
-            self::Audio => 'Audio',
-            self::VideoKids => 'Video (Kids)',
-            self::VideoAdults => 'Video (Adults)',
+            self::Audio => __('Audio'),
+            self::VideoKids => __('Video (Kids)'),
+            self::VideoAdults => __('Video (Adults)'),
         };
     }
 

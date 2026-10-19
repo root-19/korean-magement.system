@@ -117,11 +117,10 @@ class InstructorController extends Controller
 
         return redirect()
             ->route('admin.instructors.show', $instructor)
-            ->with('success', sprintf(
-                '%s added. Temporary password: %s',
-                $instructor->name,
-                $password,
-            ));
+            ->with('success', __(':name added. Temporary password: :password', [
+                'name' => $instructor->name,
+                'password' => $password,
+            ]));
     }
 
     public function show(Request $request, User $instructor): View
@@ -160,7 +159,7 @@ class InstructorController extends Controller
         abort_unless($instructor->role === Role::Instructor, 404);
 
         // An admin locking themselves out of their own account is never intended.
-        abort_if($instructor->id === $request->user()->id, 403, 'You cannot deactivate your own account.');
+        abort_if($instructor->id === $request->user()->id, 403, __('You cannot deactivate your own account.'));
 
         $instructor->update(['is_active' => ! $instructor->is_active]);
 
@@ -173,7 +172,9 @@ class InstructorController extends Controller
 
         return back()->with(
             'success',
-            "{$instructor->name} is now ".($instructor->is_active ? 'active' : 'inactive').'.'
+            $instructor->is_active
+                ? __(':name is now active.', ['name' => $instructor->name])
+                : __(':name is now inactive.', ['name' => $instructor->name])
         );
     }
 }

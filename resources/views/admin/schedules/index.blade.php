@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
-@section('title', 'Teacher Schedules')
-@section('heading', 'Teacher Schedules')
-@section('subheading', $publishedCount.' of '.$instructors->count().' instructors have published hours')
+@section('title', __('Teacher Schedules'))
+@section('heading', __('Teacher Schedules'))
+@section('subheading', __(':published of :total instructors have published hours', ['published' => $publishedCount, 'total' => $instructors->count()]))
 
 @section('content')
     @if ($publishedCount < $instructors->count())
@@ -11,16 +11,14 @@
         <div class="mb-4 flex items-start gap-3 rounded-card border border-warning-500/30 bg-warning-500/10 px-4 py-3 text-sm text-warning-400">
             <x-icon name="alert" class="mt-px h-5 w-5 shrink-0" />
             <p>
-                {{ $instructors->count() - $publishedCount }} instructors have not published any
-                availability. Their public profile shows no bookable hours, and the schedule
-                below falls back to the class times their students already hold.
+                {{ __(':count instructors have not published any availability. Their public profile shows no bookable hours, and the schedule below falls back to the class times their students already hold.', ['count' => $instructors->count() - $publishedCount]) }}
             </p>
         </div>
     @endif
 
     @if ($instructors->isEmpty())
         <x-card>
-            <x-empty-state icon="users" title="No active instructors" />
+            <x-empty-state icon="users" :title="__('No active instructors')" />
         </x-card>
     @else
         {{-- Instructor picker. Plain links, so each instructor's week is a
@@ -43,10 +41,8 @@
                                 {{ $instructor->name }}
                             </span>
                             <span class="numeric block whitespace-nowrap text-[11px] text-gray-500">
-                                {{ $instructor->availabilities_count }}
-                                {{ Str::plural('slot', $instructor->availabilities_count) }}
-                                · {{ $instructor->student_count }}
-                                {{ Str::plural('student', $instructor->student_count) }}
+                                {{ trans_choice(':count slot|:count slots', $instructor->availabilities_count) }}
+                                · {{ trans_choice(':count student|:count students', $instructor->student_count) }}
                             </span>
                         </span>
                     </a>
@@ -58,17 +54,17 @@
             <x-slot:title>{{ $selected?->name }}</x-slot:title>
             <x-slot:subtitle>
                 {{ $grid && $grid->isDeclared
-                    ? $grid->availableHours().' '.Str::plural('open hour', $grid->availableHours()).' published'
-                    : 'No published hours — showing existing class times' }}
+                    ? trans_choice(':count open hour published|:count open hours published', $grid->availableHours())
+                    : __('No published hours — showing existing class times') }}
             </x-slot:subtitle>
 
             <x-slot:actions>
                 <a href="{{ route('admin.instructors.show', $selected) }}" class="btn-secondary btn-sm">
-                    View instructor
+                    {{ __('View instructor') }}
                 </a>
             </x-slot:actions>
 
-            <x-schedule-grid :grid="$grid" :days="$days" :label="$selected?->name.'\'s weekly availability'" />
+            <x-schedule-grid :grid="$grid" :days="$days" :label="__(':name\'s weekly availability', ['name' => $selected?->name])" />
         </x-card>
     @endif
 @endsection

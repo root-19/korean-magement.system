@@ -18,9 +18,9 @@ enum Party: string
     public function label(): string
     {
         return match ($this) {
-            self::Student => 'Student',
-            self::Teacher => 'Teacher',
-            self::Other => 'Other',
+            self::Student => __('Student'),
+            self::Teacher => __('Teacher'),
+            self::Other => __('Other'),
         };
     }
 }

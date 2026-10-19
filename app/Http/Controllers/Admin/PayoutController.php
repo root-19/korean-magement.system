@@ -98,7 +98,11 @@ class PayoutController extends Controller
 
         return back()->with(
             'success',
-            "{$instructor->name}: ".$payout->weekLabel().' finalised at '.money($payout->net_earnings).'.'
+            __(':name: :week finalised at :amount.', [
+                'name' => $instructor->name,
+                'week' => $payout->weekLabel(),
+                'amount' => money($payout->net_earnings),
+            ])
         );
     }
 
@@ -114,12 +118,13 @@ class PayoutController extends Controller
         $window = PayoutWindow::forDate($data['week']);
         $result = $this->payouts->finaliseWeek($request->user(), $window);
 
-        return back()->with('success', sprintf(
-            '%s: %d payslip%s finalised, %d skipped.',
-            $window->label(),
+        return back()->with('success', trans_choice(
+            ':week: :count payslip finalised, :skipped skipped.|:week: :count payslips finalised, :skipped skipped.',
             $result['finalised'],
-            $result['finalised'] === 1 ? '' : 's',
-            $result['skipped'],
+            [
+                'week' => $window->label(),
+                'skipped' => $result['skipped'],
+            ],
         ));
     }
 
@@ -134,6 +139,9 @@ class PayoutController extends Controller
 
         $this->payouts->markPaid($request->user(), $payout, $data['notes'] ?? null);
 
-        return back()->with('success', "Marked paid: {$payout->instructor?->name}, {$payout->weekLabel()}.");
+        return back()->with('success', __('Marked paid: :name, :week.', [
+            'name' => $payout->instructor?->name,
+            'week' => $payout->weekLabel(),
+        ]));
     }
 }

@@ -175,7 +175,7 @@ class StudentUpdater
 
             // Nothing un-decides an enrolment, and the form never offers it.
             EnrollmentStatus::Pending => throw ValidationException::withMessages([
-                'enrollment_status' => 'A decided enrolment cannot be moved back to awaiting approval.',
+                'enrollment_status' => __('A decided enrolment cannot be moved back to awaiting approval.'),
             ]),
         };
     }

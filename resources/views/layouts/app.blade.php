@@ -15,7 +15,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta name="csrf-token" content="{{ csrf_token() }}">
 
-    <title>@yield('title', 'Dashboard') · {{ config('app.name') }}</title>
+    <title>@yield('title', __('Dashboard')) · {{ config('app.name') }}</title>
 
     <link rel="icon" href="{{ asset('images/10-minute.png') }}" sizes="any">
 
@@ -52,7 +52,7 @@
                'lg:translate-x-0': !collapsed,
                'lg:-translate-x-full': collapsed,
            }"
-           aria-label="Sidebar">
+           aria-label="{{ __('Sidebar') }}">
 
         <div class="flex shrink-0 items-center justify-between gap-2 border-b border-gray-700 px-4 py-4">
             <a href="{{ App\Http\Middleware\RedirectToRoleHome::homeFor(auth()->user()) }}"
@@ -70,12 +70,12 @@
             <button type="button"
                     x-on:click="sidebarOpen = false"
                     class="text-white transition-colors hover:text-brand-400 lg:hidden"
-                    aria-label="Close navigation">
+                    aria-label="{{ __('Close navigation') }}">
                 <x-icon name="x" class="h-6 w-6" />
             </button>
         </div>
 
-        <nav class="flex-1 space-y-5 overflow-y-auto px-4 py-5" aria-label="Main">
+        <nav class="flex-1 space-y-5 overflow-y-auto px-4 py-5" aria-label="{{ __('Main') }}">
             @foreach ($navigation as $group)
                 <div>
                     @if ($group['label'])
@@ -115,12 +115,27 @@
                 </div>
             </div>
 
+            {{-- Admin pages only: instructor and student pages are English. --}}
+            @if (auth()->user()->isAdmin())
+                <form method="POST" action="{{ route('admin.locale') }}" class="mt-3">
+                    @csrf
+                    <label for="admin-locale" class="sr-only">{{ __('Language') }}</label>
+                    <select id="admin-locale" name="locale" onchange="this.form.submit()"
+                            class="form-select !py-1.5 text-xs">
+                        @foreach (config('app.admin_locales') as $code => $language)
+                            <option value="{{ $code }}" @selected(app()->getLocale() === $code)>{{ $language }}</option>
+                        @endforeach
+                    </select>
+                    <noscript><button type="submit" class="btn-secondary btn-sm mt-2 w-full">{{ __('Change language') }}</button></noscript>
+                </form>
+            @endif
+
             <form method="POST" action="{{ route('logout') }}" class="mt-3">
                 @csrf
                 <button type="submit"
                         class="focus-ring flex w-full items-center gap-3 rounded-md px-3 py-2 text-sm font-medium text-brand-400 transition hover:bg-accent-400 hover:text-white">
                     <x-icon name="logout" class="h-5 w-5 shrink-0" />
-                    Logout
+                    {{ __('Logout') }}
                 </button>
             </form>
         </div>
@@ -134,20 +149,20 @@
             <button type="button"
                     x-on:click="sidebarOpen = true"
                     class="btn-primary !p-2 lg:hidden"
-                    aria-label="Open navigation">
+                    aria-label="{{ __('Open navigation') }}">
                 <x-icon name="menu" class="h-5 w-5" />
             </button>
 
             <button type="button"
                     x-on:click="toggleCollapsed()"
                     class="btn-primary hidden !p-2 lg:inline-flex"
-                    :aria-label="collapsed ? 'Show navigation' : 'Hide navigation'">
+                    :aria-label="collapsed ? @js(__('Show navigation')) : @js(__('Hide navigation'))">
                 <x-icon name="menu" class="h-5 w-5" />
             </button>
 
             <div class="min-w-0 flex-1">
                 <h1 class="heading truncate text-lg">
-                    @yield('heading', View::getSection('title', 'Dashboard'))
+                    @yield('heading', View::getSection('title', __('Dashboard')))
                 </h1>
                 @hasSection('subheading')
                     <p class="truncate text-xs text-gray-400">@yield('subheading')</p>

@@ -1,8 +1,8 @@
 @extends('layouts.app')
 
-@section('title', 'Audit Log')
-@section('heading', 'Audit Log')
-@section('subheading', $entries->total().' recorded '.Str::plural('action', $entries->total()))
+@section('title', __('Audit Log'))
+@section('heading', __('Audit Log'))
+@section('subheading', trans_choice(':count recorded action|:count recorded actions', $entries->total()))
 
 @section('content')
     {{-- Replaces the legacy backup/restore screens. Those existed because rows
@@ -12,48 +12,46 @@
     <div class="mb-4 flex items-start gap-3 rounded-card border border-brand-500/30 bg-brand-500/10 px-4 py-3 text-sm text-brand-400">
         <x-icon name="info" class="mt-px h-5 w-5 shrink-0" />
         <p>
-            Nothing in this system is hard-deleted — archiving a student or instructor keeps
-            every attendance and report row, so earnings are never lost. This log records
-            who changed what.
+            {{ __('Nothing in this system is hard-deleted — archiving a student or instructor keeps every attendance and report row, so earnings are never lost. This log records who changed what.') }}
         </p>
     </div>
 
     <form method="GET" class="mb-4 flex flex-wrap items-center gap-2">
         <select name="action" onchange="this.form.submit()" class="form-select !w-auto text-xs"
-                aria-label="Filter by action">
-            <option value="">All actions</option>
+                aria-label="{{ __('Filter by action') }}">
+            <option value="">{{ __('All actions') }}</option>
             @foreach ($actions as $option)
                 <option value="{{ $option }}" @selected($action === $option)>{{ $option }}</option>
             @endforeach
         </select>
 
         @if ($action !== '')
-            <a href="{{ route('admin.audit.index') }}" class="btn-ghost btn-sm">Clear</a>
+            <a href="{{ route('admin.audit.index') }}" class="btn-ghost btn-sm">{{ __('Clear') }}</a>
         @endif
     </form>
 
     <x-card flush>
         @if ($entries->isEmpty())
             <x-empty-state icon="database"
-                           title="Nothing recorded yet"
-                           message="Actions that move money or change enrolment are logged here." />
+                           :title="__('Nothing recorded yet')"
+                           :message="__('Actions that move money or change enrolment are logged here.')" />
         @else
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>When</th>
-                            <th>Action</th>
-                            <th>Subject</th>
-                            <th>By</th>
-                            <th>Details</th>
+                            <th>{{ __('When') }}</th>
+                            <th>{{ __('Action') }}</th>
+                            <th>{{ __('Subject') }}</th>
+                            <th>{{ __('By') }}</th>
+                            <th>{{ __('Details') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($entries as $entry)
                             <tr>
                                 <td class="numeric whitespace-nowrap text-gray-400">
-                                    {{ $entry->created_at?->format('M j, Y g:i A') }}
+                                    {{ $entry->created_at?->translatedFormat('M j, Y g:i A') }}
                                     <span class="block text-[11px] text-gray-600">
                                         {{ $entry->created_at?->diffForHumans() }}
                                     </span>
@@ -68,14 +66,14 @@
                                 </td>
 
                                 <td class="truncate text-gray-300">
-                                    {{ $entry->user?->name ?? 'system' }}
+                                    {{ $entry->user?->name ?? __('system') }}
                                 </td>
 
                                 <td class="max-w-sm">
                                     @if ($entry->details)
                                         <details class="text-xs">
                                             <summary class="cursor-pointer text-gray-400 hover:text-brand-400">
-                                                {{ count($entry->details) }} {{ Str::plural('field', count($entry->details)) }}
+                                                {{ trans_choice(':count field|:count fields', count($entry->details)) }}
                                             </summary>
                                             <dl class="mt-1.5 space-y-0.5">
                                                 @foreach ($entry->details as $key => $value)

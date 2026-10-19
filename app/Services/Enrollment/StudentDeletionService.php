@@ -49,7 +49,7 @@ class StudentDeletionService
 
         if ($existing?->isPending()) {
             throw ValidationException::withMessages([
-                'reason' => "A delete request for {$student->name} is already waiting for an admin.",
+                'reason' => __('A delete request for :name is already waiting for an admin.', ['name' => $student->name]),
             ]);
         }
 
@@ -97,7 +97,7 @@ class StudentDeletionService
 
             if ($student === null) {
                 throw ValidationException::withMessages([
-                    'decision' => "{$request->student_name} no longer exists.",
+                    'decision' => __(':name no longer exists.', ['name' => $request->student_name]),
                 ]);
             }
 
@@ -133,7 +133,7 @@ class StudentDeletionService
         return DB::transaction(function () use ($admin, $student, $reason) {
             if ($student->trashed()) {
                 throw ValidationException::withMessages([
-                    'student' => "{$student->name} is already deleted.",
+                    'student' => __(':name is already deleted.', ['name' => $student->name]),
                 ]);
             }
 
@@ -298,7 +298,11 @@ class StudentDeletionService
         }
 
         throw ValidationException::withMessages([
-            'decision' => "That request was already {$request->status}.",
+            'decision' => match ($request->status) {
+                StudentDeletionRequest::APPROVED => __('That request was already approved.'),
+                StudentDeletionRequest::REJECTED => __('That request was already rejected.'),
+                default => __('That request was already :status.', ['status' => $request->status]),
+            },
         ]);
     }
 }

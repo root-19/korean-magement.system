@@ -7,6 +7,7 @@ use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
 use App\Http\Controllers\Admin\EnrollmentController;
 use App\Http\Controllers\Admin\InstructorController as AdminInstructors;
 use App\Http\Controllers\Admin\LearningMaterialController as AdminMaterials;
+use App\Http\Controllers\Admin\LocaleController as AdminLocale;
 use App\Http\Controllers\Admin\OverviewController as AdminOverview;
 use App\Http\Controllers\Admin\PayoutController;
 use App\Http\Controllers\Admin\StudentController as AdminStudents;
@@ -26,6 +27,7 @@ use App\Http\Controllers\Instructor\SessionReportController;
 use App\Http\Controllers\Instructor\StudentController;
 use App\Http\Controllers\LandingController;
 use App\Http\Controllers\Student\DashboardController as StudentDashboard;
+use App\Http\Middleware\SetAdminLocale;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -181,11 +183,14 @@ Route::middleware(['auth', 'role:student'])
 |
 */
 
-Route::middleware(['auth', 'role:admin'])
+Route::middleware(['auth', 'role:admin', SetAdminLocale::class])
     ->prefix('admin')
     ->name('admin.')
     ->group(function () {
         Route::get('/dashboard', AdminDashboard::class)->name('dashboard');
+
+        // Language of the admin pages, kept for the session.
+        Route::post('/locale', AdminLocale::class)->name('locale');
 
         // Instructors
         //

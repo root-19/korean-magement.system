@@ -11,9 +11,9 @@ enum SessionStatus: string
     public function label(): string
     {
         return match ($this) {
-            self::Present => 'Present',
-            self::Absent => 'Absent',
-            self::Postponed => 'Postponed',
+            self::Present => __('Present'),
+            self::Absent => __('Absent'),
+            self::Postponed => __('Postponed'),
         };
     }
 

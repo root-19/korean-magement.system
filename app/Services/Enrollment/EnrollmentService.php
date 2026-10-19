@@ -24,7 +24,7 @@ class EnrollmentService
 
             if ($profile->enrollment_status === EnrollmentStatus::Approved) {
                 throw ValidationException::withMessages([
-                    'enrollment' => 'That enrolment has already been approved.',
+                    'enrollment' => __('That enrolment has already been approved.'),
                 ]);
             }
 
@@ -61,7 +61,7 @@ class EnrollmentService
 
             if ($profile->enrollment_status === EnrollmentStatus::Rejected) {
                 throw ValidationException::withMessages([
-                    'enrollment' => 'That enrolment has already been rejected.',
+                    'enrollment' => __('That enrolment has already been rejected.'),
                 ]);
             }
 

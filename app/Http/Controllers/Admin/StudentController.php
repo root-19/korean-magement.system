@@ -22,7 +22,6 @@ use App\Services\Enrollment\StudentUpdater;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -97,11 +96,10 @@ class StudentController extends Controller
 
         return redirect()
             ->route('admin.students.show', $result['student'])
-            ->with('success', sprintf(
-                '%s enrolled and approved. Login: their name, password: %s',
-                $result['student']->name,
-                $result['password'],
-            ));
+            ->with('success', __(':name enrolled and approved. Login: their name, password: :password', [
+                'name' => $result['student']->name,
+                'password' => $result['password'],
+            ]));
     }
 
     public function show(User $student): View
@@ -169,7 +167,7 @@ class StudentController extends Controller
 
         return redirect()
             ->route('admin.students.show', $student)
-            ->with('success', "{$student->name} updated.");
+            ->with('success', __(':name updated.', ['name' => $student->name]));
     }
 
     /**
@@ -199,8 +197,8 @@ class StudentController extends Controller
         return back()->with(
             'success',
             $instructor
-                ? "{$student->name} reassigned to {$instructor->name}."
-                : "{$student->name} is now unassigned."
+                ? __(':student reassigned to :instructor.', ['student' => $student->name, 'instructor' => $instructor->name])
+                : __(':name is now unassigned.', ['name' => $student->name])
         );
     }
 
@@ -239,7 +237,9 @@ class StudentController extends Controller
 
         return back()->with(
             'success',
-            "{$student->name} ".($student->is_active ? 'restored' : 'archived').'.'
+            $student->is_active
+                ? __(':name restored.', ['name' => $student->name])
+                : __(':name archived.', ['name' => $student->name])
         );
     }
 
@@ -269,9 +269,9 @@ class StudentController extends Controller
 
         return redirect()
             ->route('admin.students.index')
-            ->with('success', sprintf(
-                '%s deleted. The classes taught to them are kept, so instructor payouts are unchanged.',
-                $student->name,
+            ->with('success', __(
+                ':name deleted. The classes taught to them are kept, so instructor payouts are unchanged.',
+                ['name' => $student->name],
             ));
     }
 
@@ -297,10 +297,9 @@ class StudentController extends Controller
 
         return redirect()
             ->route('admin.students.index', ['filter' => $filter])
-            ->with('success', sprintf(
-                '%d %s deleted. The classes taught to them are kept, so instructor payouts are unchanged.',
+            ->with('success', trans_choice(
+                ':count student deleted. The classes taught to them are kept, so instructor payouts are unchanged.|:count students deleted. The classes taught to them are kept, so instructor payouts are unchanged.',
                 $deleted,
-                Str::plural('student', $deleted),
             ));
     }
 

@@ -1,13 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'For Evaluation')
-@section('heading', 'For Evaluation')
-@section('subheading', 'Teachers with past classes that still have no attendance recorded')
+@section('title', __('For Evaluation'))
+@section('heading', __('For Evaluation'))
+@section('subheading', __('Teachers with past classes that still have no attendance recorded'))
 
 @section('actions')
     <a href="{{ route('admin.evaluations.index') }}" class="btn-secondary btn-sm">
         <x-icon name="clipboard" class="h-4 w-4" />
-        Evaluation List
+        {{ __('Evaluation List') }}
     </a>
 @endsection
 
@@ -16,25 +16,25 @@
          button. Classes already sent are in the Evaluation List instead. --}}
     <x-card flush>
         <x-slot:title>
-            {{ $teachers->count() }} {{ Str::plural('teacher', $teachers->count()) }}
+            {{ trans_choice(':count teacher|:count teachers', $teachers->count()) }}
         </x-slot:title>
 
         <x-slot:subtitle>
-            Last {{ $lookbackDays }} days, not counting today. Not yet sent for evaluation, or sent and rejected.
+            {{ __('Last :days days, not counting today. Not yet sent for evaluation, or sent and rejected.', ['days' => $lookbackDays]) }}
         </x-slot:subtitle>
 
         @if ($teachers->isEmpty())
             <x-empty-state icon="check-circle"
-                           title="Every class is marked"
-                           message="No teacher has an unmarked class from the last {{ $lookbackDays }} days." />
+                           :title="__('Every class is marked')"
+                           :message="__('No teacher has an unmarked class from the last :days days.', ['days' => $lookbackDays])" />
         @else
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Teacher</th>
-                            <th class="text-center">Classes</th>
-                            <th>Unmarked classes</th>
+                            <th>{{ __('Teacher') }}</th>
+                            <th class="text-center">{{ __('Classes') }}</th>
+                            <th>{{ __('Unmarked classes') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -57,9 +57,9 @@
                                         @foreach ($item['classes'] as $row)
                                             <li class="inline-flex items-center gap-1.5 rounded-lg border border-gray-700 bg-gray-800 px-2.5 py-1 text-xs text-gray-300">
                                                 {{ $row['student']->name }}
-                                                <span class="numeric text-gray-500">{{ $row['date']->format('M j') }}</span>
+                                                <span class="numeric text-gray-500">{{ $row['date']->translatedFormat('M j') }}</span>
                                                 @if ($row['request']?->isRejected())
-                                                    <span class="badge-danger shrink-0">Rejected</span>
+                                                    <span class="badge-danger shrink-0">{{ __('Rejected') }}</span>
                                                 @endif
                                             </li>
                                         @endforeach

@@ -106,6 +106,24 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Admin Languages
+    |--------------------------------------------------------------------------
+    |
+    | The languages an admin can switch the admin pages to, and the name each
+    | is shown under in the switcher. English is the default. Text lives in
+    | lang/{code}.json, keyed by the English; anything missing falls back to
+    | English. Instructor and student pages are always English — see
+    | SetAdminLocale.
+    |
+    */
+
+    'admin_locales' => [
+        'en' => 'English',
+        'ko' => '한국어',
+    ],
+
+    /*
+    |--------------------------------------------------------------------------
     | Faker Locale
     |--------------------------------------------------------------------------
     |

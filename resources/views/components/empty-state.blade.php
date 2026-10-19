@@ -1,6 +1,6 @@
 @props([
     'icon' => 'inbox',
-    'title' => 'Nothing here yet',
+    'title' => null,
     'message' => null,
 ])
 
@@ -15,7 +15,7 @@
         <x-icon :name="$icon" class="h-6 w-6" />
     </span>
 
-    <p class="mt-3 text-sm font-semibold text-white">{{ $title }}</p>
+    <p class="mt-3 text-sm font-semibold text-white">{{ $title ?? __('Nothing here yet') }}</p>
 
     @if ($message)
         <p class="mt-1 max-w-sm text-sm text-gray-400">{{ $message }}</p>

@@ -1,19 +1,19 @@
 @extends('layouts.app')
 
-@section('title', 'Learning Materials')
-@section('heading', 'Learning Materials')
-@section('subheading', 'PDFs published to instructors')
+@section('title', __('Learning Materials'))
+@section('heading', __('Learning Materials'))
+@section('subheading', __('PDFs published to instructors'))
 
 @section('content')
     <div class="grid gap-4 lg:grid-cols-3">
         {{-- ──────────────────────────────────────────────── Upload form ───── --}}
         <div class="lg:col-span-1 space-y-4">
-            <x-card title="Folders" subtitle="One level, to group the library">
+            <x-card :title="__('Folders')" :subtitle="__('One level, to group the library')">
                 <form method="POST" action="{{ route('admin.materials.folders.store') }}" class="flex gap-2">
                     @csrf
                     <input type="text" name="name" maxlength="120" required class="form-input"
-                           placeholder="e.g. Grammar drills" value="{{ old('name') }}">
-                    <button type="submit" class="btn-secondary shrink-0">Add</button>
+                           placeholder="{{ __('e.g. Grammar drills') }}" value="{{ old('name') }}">
+                    <button type="submit" class="btn-secondary shrink-0">{{ __('Add') }}</button>
                 </form>
                 @error('name') <p class="form-error">{{ $message }}</p> @enderror
 
@@ -30,11 +30,11 @@
                                      fall back to Uncategorised. --}}
                                 <form method="POST"
                                       action="{{ route('admin.materials.folders.destroy', $folder) }}"
-                                      onsubmit="return confirm('Remove this folder? Its materials move to Uncategorised - nothing is deleted.')">
+                                      onsubmit="return confirm(@js(__('Remove this folder? Its materials move to Uncategorised - nothing is deleted.')))">
                                     @csrf
                                     @method('DELETE')
                                     <button type="submit" class="btn-ghost btn-sm !px-1.5"
-                                            aria-label="Remove folder {{ $folder->name }}">
+                                            aria-label="{{ __('Remove folder :name', ['name' => $folder->name]) }}">
                                         <x-icon name="trash" class="h-3.5 w-3.5" />
                                     </button>
                                 </form>
@@ -44,7 +44,7 @@
                 @endif
             </x-card>
 
-            <x-card title="Post a material" subtitle="PDF, up to 20 MB">
+            <x-card :title="__('Post a material')" :subtitle="__('PDF, up to 20 MB')">
                 <form method="POST"
                       action="{{ route('admin.materials.store') }}"
                       enctype="multipart/form-data"
@@ -52,7 +52,7 @@
                     @csrf
 
                     <div>
-                        <label for="title" class="form-label">Title</label>
+                        <label for="title" class="form-label">{{ __('Title') }}</label>
                         <input id="title"
                                name="title"
                                type="text"
@@ -60,29 +60,29 @@
                                required
                                maxlength="255"
                                class="form-input"
-                               placeholder="e.g. Grammar drills — present perfect">
+                               placeholder="{{ __('e.g. Grammar drills — present perfect') }}">
                         @error('title') <p class="form-error">{{ $message }}</p> @enderror
                     </div>
 
                     <div>
                         <label for="description" class="form-label">
-                            Description <span class="text-gray-500">(optional)</span>
+                            {{ __('Description') }} <span class="text-gray-500">{{ __('(optional)') }}</span>
                         </label>
                         <textarea id="description"
                                   name="description"
                                   rows="3"
                                   maxlength="5000"
                                   class="form-textarea"
-                                  placeholder="What this covers, and who it is for">{{ old('description') }}</textarea>
+                                  placeholder="{{ __('What this covers, and who it is for') }}">{{ old('description') }}</textarea>
                         @error('description') <p class="form-error">{{ $message }}</p> @enderror
                     </div>
 
                     <div>
                         <label for="folder_id" class="form-label">
-                            Folder <span class="text-gray-500">(optional)</span>
+                            {{ __('Folder') }} <span class="text-gray-500">{{ __('(optional)') }}</span>
                         </label>
                         <select id="folder_id" name="folder_id" class="form-select">
-                            <option value="">Uncategorised</option>
+                            <option value="">{{ __('Uncategorised') }}</option>
                             @foreach ($folders as $folder)
                                 <option value="{{ $folder->id }}" @selected(old('folder_id') == $folder->id)>
                                     {{ $folder->name }}
@@ -92,7 +92,7 @@
                     </div>
 
                     <div>
-                        <label for="file" class="form-label">PDF file</label>
+                        <label for="file" class="form-label">{{ __('PDF file') }}</label>
                         <input id="file"
                                name="file"
                                type="file"
@@ -101,7 +101,7 @@
                                class="form-input file:mr-3 file:rounded file:border-0 file:bg-brand-400 file:px-3 file:py-1.5 file:text-xs file:font-bold file:text-gray-900">
                         @error('file') <p class="form-error">{{ $message }}</p> @enderror
                         <p class="mt-1.5 text-xs text-gray-500">
-                            Stored outside the web root and only served to signed-in staff.
+                            {{ __('Stored outside the web root and only served to signed-in staff.') }}
                         </p>
                     </div>
 
@@ -112,14 +112,14 @@
                                @checked(old('is_published'))
                                class="mt-0.5 h-4 w-4 rounded border-gray-600 bg-gray-900 text-brand-500 focus:ring-brand-400">
                         <span class="text-sm text-gray-300">
-                            Publish immediately
+                            {{ __('Publish immediately') }}
                             <span class="mt-0.5 block text-xs text-gray-500">
-                                Leave unticked to keep it as a draft only admins can see.
+                                {{ __('Leave unticked to keep it as a draft only admins can see.') }}
                             </span>
                         </span>
                     </label>
 
-                    <button type="submit" class="btn-primary w-full">Post material</button>
+                    <button type="submit" class="btn-primary w-full">{{ __('Post material') }}</button>
                 </form>
             </x-card>
         </div>
@@ -128,26 +128,26 @@
         <div class="lg:col-span-2">
             <x-card flush>
                 <x-slot:title>
-                    {{ $materials->total() }} {{ Str::plural('material', $materials->total()) }}
+                    {{ trans_choice(':count material|:count materials', $materials->total()) }}
                 </x-slot:title>
 
                 <x-slot:subtitle>
-                    {{ $materials->getCollection()->where('is_published', true)->count() }} published on this page
+                    {{ __(':count published on this page', ['count' => $materials->getCollection()->where('is_published', true)->count()]) }}
                 </x-slot:subtitle>
 
                 @if ($materials->isEmpty())
                     <x-empty-state icon="book-open"
-                                   title="No materials yet"
-                                   message="Post a PDF and it appears on the instructors' Learning Materials page as soon as it is published." />
+                                   :title="__('No materials yet')"
+                                   :message="__('Post a PDF and it appears on the instructors\' Learning Materials page as soon as it is published.')" />
                 @else
                     <div class="table-wrap">
                         <table class="table">
                             <thead>
                                 <tr>
-                                    <th>Material</th>
-                                    <th>Posted</th>
-                                    <th>Status</th>
-                                    <th class="text-right">Actions</th>
+                                    <th>{{ __('Material') }}</th>
+                                    <th>{{ __('Posted') }}</th>
+                                    <th>{{ __('Status') }}</th>
+                                    <th class="text-right">{{ __('Actions') }}</th>
                                 </tr>
                             </thead>
                             <tbody>
@@ -166,24 +166,24 @@
                                             @endif
 
                                             <p class="mt-0.5 text-xs text-gray-500">
-                                                <span class="badge-neutral">{{ $material->folder?->name ?? 'Uncategorised' }}</span>
+                                                <span class="badge-neutral">{{ $material->folder?->name ?? __('Uncategorised') }}</span>
                                                 {{ $material->original_name }} ·
                                                 <span class="numeric">{{ $material->readableSize() }}</span>
                                             </p>
                                         </td>
 
                                         <td class="whitespace-nowrap text-xs text-gray-400">
-                                            <span class="numeric">{{ $material->created_at->format('M j, Y') }}</span>
+                                            <span class="numeric">{{ $material->created_at->translatedFormat('M j, Y') }}</span>
                                             @if ($material->uploader)
-                                                <span class="block text-gray-500">by {{ $material->uploader->name }}</span>
+                                                <span class="block text-gray-500">{{ __('by :name', ['name' => $material->uploader->name]) }}</span>
                                             @endif
                                         </td>
 
                                         <td>
                                             @if ($material->is_published)
-                                                <span class="badge-success">Published</span>
+                                                <span class="badge-success">{{ __('Published') }}</span>
                                             @else
-                                                <span class="badge-neutral">Draft</span>
+                                                <span class="badge-neutral">{{ __('Draft') }}</span>
                                             @endif
                                         </td>
 
@@ -195,7 +195,7 @@
                                                     @csrf
                                                     @method('PATCH')
                                                     <button type="submit" class="btn-secondary btn-sm">
-                                                        {{ $material->is_published ? 'Unpublish' : 'Publish' }}
+                                                        {{ $material->is_published ? __('Unpublish') : __('Publish') }}
                                                     </button>
                                                 </form>
 
@@ -204,11 +204,11 @@
                                                 <form method="POST"
                                                       action="{{ route('admin.materials.destroy', $material) }}"
                                                       class="inline"
-                                                      onsubmit="return confirm('Delete “{{ $material->title }}” and its PDF? This cannot be undone.')">
+                                                      onsubmit="return confirm(@js(__('Delete “:title” and its PDF? This cannot be undone.', ['title' => $material->title])))">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" class="btn-ghost btn-sm !px-1.5"
-                                                            aria-label="Delete {{ $material->title }}">
+                                                            aria-label="{{ __('Delete :title', ['title' => $material->title]) }}">
                                                         <x-icon name="trash" class="h-4 w-4" />
                                                     </button>
                                                 </form>

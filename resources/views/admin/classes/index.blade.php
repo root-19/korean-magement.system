@@ -1,21 +1,21 @@
 @extends('layouts.app')
 
-@section('title', 'Classes')
-@section('heading', 'Classes')
-@section('subheading', $date->format('l, F j, Y').' · '.$totals['total'].' '.Str::plural('slot', $totals['total']))
+@section('title', __('Classes'))
+@section('heading', __('Classes'))
+@section('subheading', $date->translatedFormat('l, F j, Y').' · '.trans_choice(':count slot|:count slots', $totals['total']))
 
 @section('actions')
     <form method="GET" class="flex items-center gap-1.5">
         <a href="{{ route('admin.classes.index', ['date' => $date->subDay()->toDateString()]) }}"
-           class="btn-ghost !p-2" aria-label="Previous day">
+           class="btn-ghost !p-2" aria-label="{{ __('Previous day') }}">
             <x-icon name="chevron-left" class="h-4 w-4" />
         </a>
 
         <input type="date" name="date" value="{{ $date->toDateString() }}" onchange="this.form.submit()"
-               class="form-input numeric !w-auto !py-1.5 text-xs" aria-label="Date">
+               class="form-input numeric !w-auto !py-1.5 text-xs" aria-label="{{ __('Date') }}">
 
         <a href="{{ route('admin.classes.index', ['date' => $date->addDay()->toDateString()]) }}"
-           class="btn-ghost !p-2" aria-label="Next day">
+           class="btn-ghost !p-2" aria-label="{{ __('Next day') }}">
             <x-icon name="chevron-right" class="h-4 w-4" />
         </a>
     </form>
@@ -23,12 +23,12 @@
 
 @section('content')
     <div class="grid gap-4 sm:grid-cols-3 xl:grid-cols-5">
-        <x-stat-card label="Present" value="{{ $totals['present'] }}" icon="check-circle" tone="success" />
-        <x-stat-card label="Student absent" value="{{ $totals['student_absent'] }}" icon="x-circle" tone="warning" />
-        <x-stat-card label="Teacher absent" value="{{ $totals['teacher_absent'] }}" icon="alert"
+        <x-stat-card :label="__('Present')" value="{{ $totals['present'] }}" icon="check-circle" tone="success" />
+        <x-stat-card :label="__('Student absent')" value="{{ $totals['student_absent'] }}" icon="x-circle" tone="warning" />
+        <x-stat-card :label="__('Teacher absent')" value="{{ $totals['teacher_absent'] }}" icon="alert"
                      :tone="$totals['teacher_absent'] > 0 ? 'danger' : 'default'" />
-        <x-stat-card label="Postponed" value="{{ $totals['postponed'] }}" icon="clock" />
-        <x-stat-card label="Unmarked" value="{{ $totals['unmarked'] }}" icon="inbox"
+        <x-stat-card :label="__('Postponed')" value="{{ $totals['postponed'] }}" icon="clock" />
+        <x-stat-card :label="__('Unmarked')" value="{{ $totals['unmarked'] }}" icon="inbox"
                      :tone="$totals['unmarked'] > 0 ? 'warning' : 'default'" />
     </div>
 
@@ -37,8 +37,8 @@
             <input type="hidden" name="date" value="{{ $date->toDateString() }}">
 
             <select name="instructor" onchange="this.form.submit()" class="form-select !w-auto text-xs"
-                    aria-label="Filter by instructor">
-                <option value="">All instructors</option>
+                    aria-label="{{ __('Filter by instructor') }}">
+                <option value="">{{ __('All instructors') }}</option>
                 @foreach ($instructors as $instructor)
                     <option value="{{ $instructor->id }}" @selected((int) $selectedInstructor === $instructor->id)>
                         {{ $instructor->name }}
@@ -47,35 +47,35 @@
             </select>
 
             <select name="status" onchange="this.form.submit()" class="form-select !w-auto text-xs"
-                    aria-label="Filter by status">
-                <option value="">Any status</option>
-                @foreach (['present' => 'Present', 'absent' => 'Absent', 'postponed' => 'Postponed', 'unmarked' => 'Unmarked'] as $value => $label)
+                    aria-label="{{ __('Filter by status') }}">
+                <option value="">{{ __('Any status') }}</option>
+                @foreach (['present' => __('Present'), 'absent' => __('Absent'), 'postponed' => __('Postponed'), 'unmarked' => __('Unmarked')] as $value => $label)
                     <option value="{{ $value }}" @selected($selectedStatus === $value)>{{ $label }}</option>
                 @endforeach
             </select>
         </form>
 
         @if (! $date->isToday())
-            <a href="{{ route('admin.classes.index') }}" class="btn-ghost btn-sm">Back to today</a>
+            <a href="{{ route('admin.classes.index') }}" class="btn-ghost btn-sm">{{ __('Back to today') }}</a>
         @endif
     </div>
 
     <x-card class="mt-4" flush>
         @if ($sessions->isEmpty())
             <x-empty-state icon="calendar"
-                           title="No classes on this day"
-                           message="Nothing recorded for {{ $date->format('l, F j') }} under the current filters." />
+                           :title="__('No classes on this day')"
+                           :message="__('Nothing recorded for :date under the current filters.', ['date' => $date->translatedFormat('l, F j')])" />
         @else
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Time</th>
-                            <th>Instructor</th>
-                            <th>Student</th>
-                            <th>Type</th>
-                            <th>Status</th>
-                            <th>Report</th>
+                            <th>{{ __('Time') }}</th>
+                            <th>{{ __('Instructor') }}</th>
+                            <th>{{ __('Student') }}</th>
+                            <th>{{ __('Type') }}</th>
+                            <th>{{ __('Status') }}</th>
+                            <th>{{ __('Report') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -83,12 +83,12 @@
                             <tr>
                                 <td class="numeric whitespace-nowrap text-gray-300">
                                     {{ $session->scheduled_time
-                                        ? \Carbon\Carbon::parse($session->scheduled_time)->format('g:i A')
+                                        ? \Carbon\Carbon::parse($session->scheduled_time)->translatedFormat('g:i A')
                                         : '—' }}
                                     @if ($session->isEarly())
                                         <span class="badge-brand mt-0.5 block w-fit"
-                                              title="Occupies the {{ $session->scheduled_date->format('M j') }} slot">
-                                            Early
+                                              title="{{ __('Occupies the :date slot', ['date' => $session->scheduled_date->translatedFormat('M j')]) }}">
+                                            {{ __('Early') }}
                                         </span>
                                     @endif
                                 </td>
@@ -126,15 +126,15 @@
                                             @endif
                                         </span>
                                     @else
-                                        <span class="badge-neutral">Not marked</span>
+                                        <span class="badge-neutral">{{ __('Not marked') }}</span>
                                     @endif
                                 </td>
 
                                 <td>
                                     @if ($reported->has($session->instructor_id.'|'.$session->student_id))
-                                        <span class="badge-success">Filed</span>
+                                        <span class="badge-success">{{ __('Filed') }}</span>
                                     @elseif ($session->isPayable())
-                                        <span class="badge-warning" title="Unpaid until the report is filed">Missing</span>
+                                        <span class="badge-warning" title="{{ __('Unpaid until the report is filed') }}">{{ __('Missing') }}</span>
                                     @else
                                         <span class="text-xs text-gray-500">—</span>
                                     @endif
@@ -152,7 +152,6 @@
     </x-card>
 
     <p class="mt-4 text-xs text-gray-500">
-        Listed by the date each class was taught, so an early class appears on the day it
-        happened rather than on the future slot it covers.
+        {{ __('Listed by the date each class was taught, so an early class appears on the day it happened rather than on the future slot it covers.') }}
     </p>
 @endsection

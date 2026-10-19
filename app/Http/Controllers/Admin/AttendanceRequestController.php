@@ -78,11 +78,13 @@ class AttendanceRequestController extends Controller
             userId: $request->user()->id,
         );
 
-        return back()->with('success', sprintf(
-            '%s the %s class for %s.',
-            $data['decision'] === AttendanceRequest::APPROVED ? 'Approved' : 'Rejected',
-            $evaluation->class_date->format('M j'),
-            $evaluation->student?->name ?? 'that student',
-        ));
+        $replace = [
+            'date' => $evaluation->class_date->translatedFormat('M j'),
+            'student' => $evaluation->student?->name ?? __('that student'),
+        ];
+
+        return back()->with('success', $data['decision'] === AttendanceRequest::APPROVED
+            ? __('Approved the :date class for :student.', $replace)
+            : __('Rejected the :date class for :student.', $replace));
     }
 }

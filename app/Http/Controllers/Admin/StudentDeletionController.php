@@ -70,11 +70,11 @@ class StudentDeletionController extends Controller
         if ($data['decision'] === StudentDeletionRequest::APPROVED) {
             $this->deletions->approve($admin, $deletion, $note);
 
-            return back()->with('success', "{$name} deleted. Instructor payouts are unchanged — the classes taught to them are kept.");
+            return back()->with('success', __(':name deleted. Instructor payouts are unchanged — the classes taught to them are kept.', ['name' => $name]));
         }
 
         $this->deletions->reject($admin, $deletion, $note);
 
-        return back()->with('success', "Delete request for {$name} rejected. Nothing was removed.");
+        return back()->with('success', __('Delete request for :name rejected. Nothing was removed.', ['name' => $name]));
     }
 }

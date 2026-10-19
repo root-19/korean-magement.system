@@ -1,13 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'Students')
-@section('heading', 'Students')
-@section('subheading', $students->total().' '.Str::plural('student', $students->total()))
+@section('title', __('Students'))
+@section('heading', __('Students'))
+@section('subheading', trans_choice(':count student|:count students', $students->total()))
 
 @section('actions')
     <a href="{{ route('admin.students.create') }}" class="btn-primary btn-sm">
         <x-icon name="user-plus" class="h-4 w-4" />
-        Add student
+        {{ __('Add student') }}
     </a>
 @endsection
 
@@ -16,11 +16,11 @@
          collapsed into filters on one list. --}}
     <div class="mb-4 flex flex-wrap items-center gap-1 rounded-lg border border-gray-700 bg-gray-800 p-1">
         @foreach ([
-            'active' => 'Active',
-            'unassigned' => 'Unassigned',
-            'no_sessions' => 'No sessions left',
-            'pending' => 'Pending',
-            'archived' => 'Archived',
+            'active' => __('Active'),
+            'unassigned' => __('Unassigned'),
+            'no_sessions' => __('No sessions left'),
+            'pending' => __('Pending'),
+            'archived' => __('Archived'),
         ] as $value => $label)
             <a href="{{ route('admin.students.index', ['filter' => $value, 'q' => $search ?: null]) }}"
                @class([
@@ -42,8 +42,8 @@
             <span class="pointer-events-none absolute inset-y-0 left-0 flex items-center pl-3 text-gray-500">
                 <x-icon name="search" class="h-4 w-4" />
             </span>
-            <input type="search" name="q" value="{{ $search }}" placeholder="Search students…"
-                   class="form-input pl-9" aria-label="Search students">
+            <input type="search" name="q" value="{{ $search }}" placeholder="{{ __('Search students…') }}"
+                   class="form-input pl-9" aria-label="{{ __('Search students') }}">
         </form>
 
         <form method="GET" class="flex items-center gap-2">
@@ -52,8 +52,8 @@
                 <input type="hidden" name="q" value="{{ $search }}">
             @endif
             <select name="instructor" onchange="this.form.submit()" class="form-select !w-auto text-xs"
-                    aria-label="Filter by instructor">
-                <option value="">All instructors</option>
+                    aria-label="{{ __('Filter by instructor') }}">
+                <option value="">{{ __('All instructors') }}</option>
                 @foreach ($instructors as $instructor)
                     <option value="{{ $instructor->id }}" @selected((int) $selectedInstructor === $instructor->id)>
                         {{ $instructor->name }}
@@ -66,7 +66,7 @@
              filter above applied — not just the 30 rows on screen. --}}
         @if ($filter === 'no_sessions' && $students->total() > 0)
             <form method="POST" action="{{ route('admin.students.destroy-many') }}" class="sm:ml-auto"
-                  onsubmit="return confirm('Delete all {{ $students->total() }} {{ Str::plural('student', $students->total()) }} in this list? They are removed from every list and can no longer sign in. Their classes and reports are kept.')">
+                  onsubmit="return confirm(@js(trans_choice('Delete all :count student in this list? They are removed from every list and can no longer sign in. Their classes and reports are kept.|Delete all :count students in this list? They are removed from every list and can no longer sign in. Their classes and reports are kept.', $students->total())))">
                 @csrf
                 @method('DELETE')
                 <input type="hidden" name="filter" value="{{ $filter }}">
@@ -78,7 +78,7 @@
                 @endif
                 <button type="submit" class="btn-danger btn-sm">
                     <x-icon name="trash" class="h-4 w-4" />
-                    Delete all ({{ $students->total() }})
+                    {{ __('Delete all (:count)', ['count' => $students->total()]) }}
                 </button>
             </form>
         @endif
@@ -87,22 +87,22 @@
     <x-card flush>
         @if ($students->isEmpty())
             <x-empty-state icon="users"
-                           :title="$search !== '' ? 'No students match “'.$search.'”' : 'No students in this view'"
-                           message="Try another filter, or clear the search.">
-                <a href="{{ route('admin.students.index') }}" class="btn-secondary btn-sm">Reset filters</a>
+                           :title="$search !== '' ? __('No students match “:search”', ['search' => $search]) : __('No students in this view')"
+                           :message="__('Try another filter, or clear the search.')">
+                <a href="{{ route('admin.students.index') }}" class="btn-secondary btn-sm">{{ __('Reset filters') }}</a>
             </x-empty-state>
         @else
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Student</th>
-                            <th>Instructor</th>
-                            <th>Type</th>
-                            <th>Schedule</th>
-                            <th class="text-center">Left</th>
-                            <th>Status</th>
-                            <th class="w-px"><span class="sr-only">Actions</span></th>
+                            <th>{{ __('Student') }}</th>
+                            <th>{{ __('Instructor') }}</th>
+                            <th>{{ __('Type') }}</th>
+                            <th>{{ __('Schedule') }}</th>
+                            <th class="text-center">{{ __('Left') }}</th>
+                            <th>{{ __('Status') }}</th>
+                            <th class="w-px"><span class="sr-only">{{ __('Actions') }}</span></th>
                         </tr>
                     </thead>
                     <tbody>
@@ -124,7 +124,7 @@
                                             {{ $profile->instructor->name }}
                                         </a>
                                     @else
-                                        <span class="badge-danger">Unassigned</span>
+                                        <span class="badge-danger">{{ __('Unassigned') }}</span>
                                     @endif
                                 </td>
 
@@ -143,7 +143,7 @@
                                             @endforeach
                                         </div>
                                     @else
-                                        <span class="text-xs text-gray-500">Not set</span>
+                                        <span class="text-xs text-gray-500">{{ __('Not set') }}</span>
                                     @endif
                                 </td>
 
@@ -159,9 +159,9 @@
                                     @if ($student?->trashed())
                                         {{-- Deleted, not archived: an approved deletion
                                              request took them out of the app entirely. --}}
-                                        <span class="badge-danger">Deleted</span>
+                                        <span class="badge-danger">{{ __('Deleted') }}</span>
                                     @elseif ($student && ! $student->is_active)
-                                        <span class="badge-neutral">Archived</span>
+                                        <span class="badge-neutral">{{ __('Archived') }}</span>
                                     @else
                                         <span class="{{ $profile->enrollment_status->badgeClass() }}">
                                             {{ $profile->enrollment_status->label() }}
@@ -173,9 +173,9 @@
                                     @if ($student)
                                         <div class="flex items-center justify-end gap-1">
                                             <a href="{{ route('admin.students.edit', $student) }}"
-                                               class="btn-ghost btn-sm" aria-label="Edit {{ $student->name }}">
+                                               class="btn-ghost btn-sm" aria-label="{{ __('Edit :name', ['name' => $student->name]) }}">
                                                 <x-icon name="pencil" class="h-4 w-4" />
-                                                Edit
+                                                {{ __('Edit') }}
                                             </a>
 
                                             {{-- Already-deleted students keep the row for the
@@ -183,13 +183,13 @@
                                             @unless ($student->trashed())
                                                 <form method="POST"
                                                       action="{{ route('admin.students.destroy', $student) }}"
-                                                      onsubmit="return confirm('Delete {{ $student->name }}? They are removed from every list and can no longer sign in. Their classes and reports are kept.')">
+                                                      onsubmit="return confirm(@js(__('Delete :name? They are removed from every list and can no longer sign in. Their classes and reports are kept.', ['name' => $student->name])))">
                                                     @csrf
                                                     @method('DELETE')
                                                     <button type="submit" class="btn-ghost btn-sm text-danger-400"
-                                                            aria-label="Delete {{ $student->name }}">
+                                                            aria-label="{{ __('Delete :name', ['name' => $student->name]) }}">
                                                         <x-icon name="trash" class="h-4 w-4" />
-                                                        Delete
+                                                        {{ __('Delete') }}
                                                     </button>
                                                 </form>
                                             @endunless

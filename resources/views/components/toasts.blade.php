@@ -32,7 +32,7 @@
             <button type="button"
                     x-on:click="$store.toasts.dismiss(toast.id)"
                     class="shrink-0 opacity-60 transition hover:opacity-100"
-                    aria-label="Dismiss">
+                    aria-label="{{ __('Dismiss') }}">
                 <x-icon name="x" class="h-4 w-4" />
             </button>
         </div>

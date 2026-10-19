@@ -73,6 +73,6 @@ class Payout extends Model
 
     public function weekLabel(): string
     {
-        return $this->week_start->format('M j').' – '.$this->week_end->format('M j, Y');
+        return $this->week_start->translatedFormat('M j').' – '.$this->week_end->translatedFormat('M j, Y');
     }
 }

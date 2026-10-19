@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
@@ -53,9 +54,15 @@ class StudentSchedule extends Model
         return self::DAYS[$this->day_of_week] ?? '—';
     }
 
+    /**
+     * "Mon", in the current language — 월 on the Korean admin pages. Jan 1 2024
+     * was a Monday, so day N of that week is ISO weekday N.
+     */
     public function shortDayName(): string
     {
-        return substr($this->dayName(), 0, 3);
+        return isset(self::DAYS[$this->day_of_week])
+            ? CarbonImmutable::create(2024, 1, (int) $this->day_of_week)->translatedFormat('D')
+            : '—';
     }
 
     /**

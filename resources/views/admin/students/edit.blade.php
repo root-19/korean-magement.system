@@ -1,13 +1,13 @@
 @extends('layouts.app')
 
-@section('title', 'Edit '.$student->name)
-@section('heading', 'Edit '.$student->name)
-@section('subheading', 'Student · '.($profile->instructor?->name ?? 'unassigned'))
+@section('title', __('Edit :name', ['name' => $student->name]))
+@section('heading', __('Edit :name', ['name' => $student->name]))
+@section('subheading', __('Student · :instructor', ['instructor' => $profile->instructor?->name ?? __('unassigned')]))
 
 @section('actions')
     <a href="{{ route('admin.students.show', $student) }}" class="btn-secondary btn-sm">
         <x-icon name="chevron-left" class="h-4 w-4" />
-        Back to student
+        {{ __('Back to student') }}
     </a>
 @endsection
 
@@ -16,8 +16,7 @@
         <div class="mb-4 flex items-start gap-3 rounded-card border border-danger-500/30 bg-danger-500/10 px-4 py-3 text-sm text-danger-400">
             <x-icon name="alert" class="mt-px h-5 w-5 shrink-0" />
             <p>
-                This student is deleted and appears in no list. Edits still save, but
-                restore them from the student page for anything here to take effect.
+                {{ __('This student is deleted and appears in no list. Edits still save, but restore them from the student page for anything here to take effect.') }}
             </p>
         </div>
     @endif
@@ -27,42 +26,41 @@
         @method('PATCH')
 
         <div class="space-y-4 lg:col-span-2">
-            <x-card title="Account">
+            <x-card :title="__('Account')">
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="sm:col-span-2">
-                        <label for="name" class="form-label">Name</label>
+                        <label for="name" class="form-label">{{ __('Name') }}</label>
                         <input id="name" name="name" type="text" required value="{{ old('name', $student->name) }}"
                                class="form-input" placeholder="A540 Hyun Seo">
                         @error('name') <p class="form-error">{{ $message }}</p> @enderror
                         <p class="mt-1.5 text-xs text-gray-500">
-                            The enrolment code is part of the name, as in “A540 Hyun Seo”.
-                            Renaming does not change any attendance or report already filed.
+                            {{ __('The enrolment code is part of the name, as in “A540 Hyun Seo”. Renaming does not change any attendance or report already filed.') }}
                         </p>
                     </div>
 
                     <div>
-                        <label for="kakaotalk_id" class="form-label">KakaoTalk ID</label>
+                        <label for="kakaotalk_id" class="form-label">{{ __('KakaoTalk ID') }}</label>
                         <input id="kakaotalk_id" name="kakaotalk_id" type="text"
                                value="{{ old('kakaotalk_id', $profile->kakaotalk_id) }}" class="form-input">
                         @error('kakaotalk_id') <p class="form-error">{{ $message }}</p> @enderror
                     </div>
 
                     <div>
-                        <label for="phone" class="form-label">Phone</label>
+                        <label for="phone" class="form-label">{{ __('Phone') }}</label>
                         <input id="phone" name="phone" type="text" value="{{ old('phone', $student->phone) }}"
                                class="form-input">
                         @error('phone') <p class="form-error">{{ $message }}</p> @enderror
                     </div>
 
                     <div>
-                        <label for="email" class="form-label">Email <span class="text-gray-500">(optional)</span></label>
+                        <label for="email" class="form-label">{{ __('Email') }} <span class="text-gray-500">{{ __('(optional)') }}</span></label>
                         <input id="email" name="email" type="email" value="{{ old('email', $student->email) }}"
                                class="form-input">
                         @error('email') <p class="form-error">{{ $message }}</p> @enderror
                     </div>
 
                     <div>
-                        <label for="birthday" class="form-label">Birthday <span class="text-gray-500">(optional)</span></label>
+                        <label for="birthday" class="form-label">{{ __('Birthday') }} <span class="text-gray-500">{{ __('(optional)') }}</span></label>
                         <input id="birthday" name="birthday" type="date"
                                value="{{ old('birthday', $student->birthday?->format('Y-m-d')) }}"
                                class="form-input numeric">
@@ -71,16 +69,16 @@
                 </div>
             </x-card>
 
-            <x-card title="Plan">
+            <x-card :title="__('Plan')">
                 <div class="grid gap-4 sm:grid-cols-2">
                     <div class="sm:col-span-2"
                          x-data="{ type: '{{ old('is_regular', $profile->is_regular ? '1' : '0') }}' }">
-                        <span class="form-label">Enrolment type</span>
+                        <span class="form-label">{{ __('Enrolment type') }}</span>
 
                         <div class="grid gap-2 sm:grid-cols-2">
                             @foreach ([
-                                '1' => ['Regular', 'Fixed weekly timetable and an ongoing plan.'],
-                                '0' => ['Trial', 'A trial or one-off. Tagged “Trial” on the dashboard and classes.'],
+                                '1' => [__('Regular'), __('Fixed weekly timetable and an ongoing plan.')],
+                                '0' => [__('Trial'), __('A trial or one-off. Tagged “Trial” on the dashboard and classes.')],
                             ] as $value => $option)
                                 <label class="flex cursor-pointer items-start gap-2.5 rounded-lg border px-3 py-2.5 transition"
                                        x-bind:class="type === '{{ $value }}' ? 'border-brand-400 bg-brand-500/10' : 'border-gray-700'">
@@ -107,31 +105,30 @@
                          or duration, and forcing a value on the next edit would
                          silently restate what that student's classes are worth. --}}
                     <div>
-                        <label for="teaching_method" class="form-label">Class type</label>
+                        <label for="teaching_method" class="form-label">{{ __('Class type') }}</label>
                         <select id="teaching_method" name="teaching_method" class="form-select">
-                            <option value="">— Not set —</option>
+                            <option value="">{{ __('— Not set —') }}</option>
                             @foreach ($methods as $method)
                                 <option value="{{ $method->value }}"
                                     @selected(old('teaching_method', $profile->teaching_method?->value) === $method->value)>
-                                    {{ $method->label() }} — {{ money($method->hourlyRate()) }}/hr
+                                    {{ __(':method — :rate/hr', ['method' => $method->label(), 'rate' => money($method->hourlyRate())]) }}
                                 </option>
                             @endforeach
                         </select>
                         @error('teaching_method') <p class="form-error">{{ $message }}</p> @enderror
                         <p class="mt-1.5 text-xs text-gray-500">
-                            Sets the pay rate for classes taught from now on. Sessions
-                            already recorded keep what they were worth.
+                            {{ __('Sets the pay rate for classes taught from now on. Sessions already recorded keep what they were worth.') }}
                         </p>
                     </div>
 
                     <div>
-                        <label for="learning_time" class="form-label">Minutes per class</label>
+                        <label for="learning_time" class="form-label">{{ __('Minutes per class') }}</label>
                         <select id="learning_time" name="learning_time" class="form-select">
-                            <option value="">— Not set —</option>
+                            <option value="">{{ __('— Not set —') }}</option>
                             @foreach ($learningTimes as $minutes)
                                 <option value="{{ $minutes }}"
                                     @selected((int) old('learning_time', $profile->learning_time) === $minutes)>
-                                    {{ $minutes }} min
+                                    {{ __(':minutes min', ['minutes' => $minutes]) }}
                                 </option>
                             @endforeach
                         </select>
@@ -139,7 +136,7 @@
                     </div>
 
                     <div>
-                        <label for="start_date" class="form-label">Start date</label>
+                        <label for="start_date" class="form-label">{{ __('Start date') }}</label>
                         <input id="start_date" name="start_date" type="date"
                                value="{{ old('start_date', $profile->start_date?->format('Y-m-d')) }}"
                                class="form-input numeric">
@@ -147,7 +144,7 @@
                     </div>
 
                     <div>
-                        <label for="end_date" class="form-label">End date <span class="text-gray-500">(optional)</span></label>
+                        <label for="end_date" class="form-label">{{ __('End date') }} <span class="text-gray-500">{{ __('(optional)') }}</span></label>
                         <input id="end_date" name="end_date" type="date"
                                value="{{ old('end_date', $profile->end_date?->format('Y-m-d')) }}"
                                class="form-input numeric">
@@ -157,10 +154,10 @@
             </x-card>
 
             {{-- purchased = attended + student-absent + remaining + deducted --}}
-            <x-card title="Session counters" subtitle="What the student has left, used and written off">
+            <x-card :title="__('Session counters')" :subtitle="__('What the student has left, used and written off')">
                 <div class="grid gap-4 sm:grid-cols-3">
                     <div>
-                        <label for="sessions_remaining" class="form-label">Remaining</label>
+                        <label for="sessions_remaining" class="form-label">{{ __('Remaining') }}</label>
                         <input id="sessions_remaining" name="sessions_remaining" type="number" min="0" max="65535"
                                required value="{{ old('sessions_remaining', $profile->sessions_remaining) }}"
                                class="form-input numeric">
@@ -168,7 +165,7 @@
                     </div>
 
                     <div>
-                        <label for="sessions_attended" class="form-label">Attended</label>
+                        <label for="sessions_attended" class="form-label">{{ __('Attended') }}</label>
                         <input id="sessions_attended" name="sessions_attended" type="number" min="0" max="65535"
                                required value="{{ old('sessions_attended', $profile->sessions_attended) }}"
                                class="form-input numeric">
@@ -176,7 +173,7 @@
                     </div>
 
                     <div>
-                        <label for="sessions_deducted" class="form-label">Written off</label>
+                        <label for="sessions_deducted" class="form-label">{{ __('Written off') }}</label>
                         <input id="sessions_deducted" name="sessions_deducted" type="number" min="0" max="65535"
                                required value="{{ old('sessions_deducted', $profile->sessions_deducted) }}"
                                class="form-input numeric">
@@ -185,27 +182,25 @@
                 </div>
 
                 <p class="mt-3 text-xs text-gray-500">
-                    Purchased = attended + student-absent + remaining + written off.
-                    This student currently totals
-                    <strong class="numeric text-gray-300">{{ $stats['purchased'] }}</strong>,
-                    including <span class="numeric">{{ $stats['student_absent'] }}</span>
-                    student-absent {{ Str::plural('class', $stats['student_absent']) }}.
+                    {{ __('Purchased = attended + student-absent + remaining + written off.') }}
+                    {!! trans_choice('This student currently totals :purchased, including :absent student-absent class.|This student currently totals :purchased, including :absent student-absent classes.', $stats['student_absent'], [
+                        'purchased' => '<strong class="numeric text-gray-300">'.e($stats['purchased']).'</strong>',
+                        'absent' => '<span class="numeric">'.e($stats['student_absent']).'</span>',
+                    ]) !!}
                 </p>
 
                 @if ($stats['counter_attended'] !== $stats['present'])
                     <p class="mt-3 rounded-lg bg-warning-500/10 px-3 py-2 text-xs text-warning-400">
-                        The attended counter reads
-                        <strong class="numeric">{{ $stats['counter_attended'] }}</strong>
-                        but <strong class="numeric">{{ $stats['present'] }}</strong>
-                        present {{ Str::plural('session', $stats['present']) }}
-                        {{ $stats['present'] === 1 ? 'is' : 'are' }} recorded. Attendance rows
-                        are the source of truth — correcting the counter here does not change
-                        anyone's earnings.
+                        {!! trans_choice('The attended counter reads :counter but :present present session is recorded.|The attended counter reads :counter but :present present sessions are recorded.', $stats['present'], [
+                            'counter' => '<strong class="numeric">'.e($stats['counter_attended']).'</strong>',
+                            'present' => '<strong class="numeric">'.e($stats['present']).'</strong>',
+                        ]) !!}
+                        {{ __('Attendance rows are the source of truth — correcting the counter here does not change anyone\'s earnings.') }}
                     </p>
                 @endif
             </x-card>
 
-            <x-card title="Weekly schedule" subtitle="Tick each class day and set its time">
+            <x-card :title="__('Weekly schedule')" :subtitle="__('Tick each class day and set its time')">
                 <div class="space-y-2">
                     @foreach ($days as $iso => $name)
                         @php $time = old('schedule.'.$iso, $schedule[$iso] ?? ''); @endphp
@@ -223,9 +218,9 @@
                                    value="{{ $time }}"
                                    x-bind:disabled="!on"
                                    class="form-input numeric !w-auto !py-1 text-xs disabled:opacity-40"
-                                   aria-label="{{ $name }} class time">
+                                   aria-label="{{ __(':day class time', ['day' => $name]) }}">
 
-                            <span x-show="!on" class="text-xs text-gray-500">No class</span>
+                            <span x-show="!on" class="text-xs text-gray-500">{{ __('No class') }}</span>
                         </div>
                     @endforeach
                 </div>
@@ -233,16 +228,15 @@
                 @error('schedule.*') <p class="form-error">{{ $message }}</p> @enderror
 
                 <p class="mt-3 text-xs text-gray-500">
-                    Unticking a day removes it from the timetable. Classes already
-                    recorded on that day are untouched.
+                    {{ __('Unticking a day removes it from the timetable. Classes already recorded on that day are untouched.') }}
                 </p>
             </x-card>
         </div>
 
         <div class="space-y-4">
-            <x-card title="Assigned instructor">
-                <select name="instructor_id" class="form-select" aria-label="Instructor">
-                    <option value="">— Unassigned —</option>
+            <x-card :title="__('Assigned instructor')">
+                <select name="instructor_id" class="form-select" aria-label="{{ __('Instructor') }}">
+                    <option value="">{{ __('— Unassigned —') }}</option>
                     @foreach ($instructors as $instructor)
                         <option value="{{ $instructor->id }}"
                             @selected((int) old('instructor_id', $profile->instructor_id) === $instructor->id)>
@@ -253,14 +247,13 @@
                 @error('instructor_id') <p class="form-error">{{ $message }}</p> @enderror
 
                 <p class="mt-3 text-xs text-gray-500">
-                    Past sessions keep whoever taught them — reassigning does not move
-                    earnings already recorded.
+                    {{ __('Past sessions keep whoever taught them — reassigning does not move earnings already recorded.') }}
                 </p>
             </x-card>
 
-            <x-card title="Enrolment">
+            <x-card :title="__('Enrolment')">
                 <div x-data="{ status: '{{ old('enrollment_status', $profile->enrollment_status->value) }}' }">
-                    <label for="enrollment_status" class="form-label">Status</label>
+                    <label for="enrollment_status" class="form-label">{{ __('Status') }}</label>
                     <select id="enrollment_status" name="enrollment_status" x-model="status" class="form-select">
                         @foreach ($statuses as $status)
                             <option value="{{ $status->value }}"
@@ -272,21 +265,20 @@
                     @error('enrollment_status') <p class="form-error">{{ $message }}</p> @enderror
 
                     <div x-show="status === 'rejected'" x-cloak class="mt-3">
-                        <label for="rejection_reason" class="form-label">Reason</label>
+                        <label for="rejection_reason" class="form-label">{{ __('Reason') }}</label>
                         <textarea id="rejection_reason" name="rejection_reason" rows="3"
                                   class="form-textarea">{{ old('rejection_reason', $profile->rejection_reason) }}</textarea>
                         @error('rejection_reason') <p class="form-error">{{ $message }}</p> @enderror
 
                         <p class="mt-1.5 text-xs text-warning-400">
-                            Rejecting also archives the student. Nothing is deleted — their
-                            attendance and reports stay, so instructor earnings are unaffected.
+                            {{ __('Rejecting also archives the student. Nothing is deleted — their attendance and reports stay, so instructor earnings are unaffected.') }}
                         </p>
                     </div>
                 </div>
 
                 @if ($profile->enrollment_decided_at)
                     <p class="mt-3 text-xs text-gray-500">
-                        Last decided {{ $profile->enrollment_decided_at->format('M j, Y') }}.
+                        {{ __('Last decided :date.', ['date' => $profile->enrollment_decided_at->translatedFormat('M j, Y')]) }}
                     </p>
                 @endif
             </x-card>
@@ -294,14 +286,13 @@
             <div class="flex flex-col gap-2">
                 <button type="submit" class="btn-primary">
                     <x-icon name="check" class="h-4 w-4" />
-                    Save changes
+                    {{ __('Save changes') }}
                 </button>
-                <a href="{{ route('admin.students.show', $student) }}" class="btn-secondary">Cancel</a>
+                <a href="{{ route('admin.students.show', $student) }}" class="btn-secondary">{{ __('Cancel') }}</a>
             </div>
 
             <p class="text-xs text-gray-500">
-                Archiving, restoring and deletion live on the student page — they are
-                account decisions, not details.
+                {{ __('Archiving, restoring and deletion live on the student page — they are account decisions, not details.') }}
             </p>
         </div>
     </form>

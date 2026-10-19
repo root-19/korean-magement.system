@@ -48,7 +48,7 @@ class PayoutService
 
             if ($existing && $existing->status === PayoutStatus::Paid && ! $force) {
                 throw ValidationException::withMessages([
-                    'payout' => 'That week is already marked paid. Restating it requires an explicit override.',
+                    'payout' => __('That week is already marked paid. Restating it requires an explicit override.'),
                 ]);
             }
 
@@ -79,7 +79,7 @@ class PayoutService
                 subject: $payout,
                 targetName: $instructor->name,
                 details: [
-                    'week' => $window->label(),
+                    'week' => $window->label('en'),
                     'gross' => $summary->gross(),
                     'deductions' => $summary->deductions(),
                     'net' => $summary->net(),
@@ -99,7 +99,7 @@ class PayoutService
         return DB::transaction(function () use ($admin, $payout, $notes) {
             if ($payout->status === PayoutStatus::Paid) {
                 throw ValidationException::withMessages([
-                    'payout' => 'That payout is already marked paid.',
+                    'payout' => __('That payout is already marked paid.'),
                 ]);
             }
 

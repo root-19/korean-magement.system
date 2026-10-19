@@ -44,9 +44,9 @@
              coming, without dressing a dead control as a live one. --}}
         <span class="btn-secondary btn-sm cursor-not-allowed opacity-80 shadow-lg"
               aria-disabled="true"
-              title="KakaoTalk chat is not set up yet">
+              title="{{ __('KakaoTalk chat is not set up yet') }}">
             <x-icon name="chat" class="shrink-0 text-[#FEE500]" />
-            KakaoTalk — coming soon
+            {{ __('KakaoTalk — coming soon') }}
         </span>
     @endif
 </div>

@@ -1,27 +1,27 @@
 @extends('layouts.app')
 
-@section('title', 'Audit System')
-@section('heading', 'Audit System')
-@section('subheading', $window->label().($window->isCurrent() ? ' · current cut-off' : ''))
+@section('title', __('Audit System'))
+@section('heading', __('Audit System'))
+@section('subheading', $window->label().($window->isCurrent() ? ' · '.__('current cut-off') : ''))
 
 @section('actions')
     <form method="GET" class="flex items-center gap-1.5">
         <a href="{{ route('admin.attendance-audit.index', ['week' => $window->previous()->startDate()]) }}"
-           class="btn-ghost !p-2" aria-label="Previous cut-off">
+           class="btn-ghost !p-2" aria-label="{{ __('Previous cut-off') }}">
             <x-icon name="chevron-left" class="h-4 w-4" />
         </a>
 
-        <select name="week" onchange="this.form.submit()" class="form-select !w-auto !py-1.5 text-xs" aria-label="Cut-off">
+        <select name="week" onchange="this.form.submit()" class="form-select !w-auto !py-1.5 text-xs" aria-label="{{ __('Cut-off') }}">
             @foreach ($windows as $option)
                 <option value="{{ $option->startDate() }}" @selected($option->key() === $window->key())>
-                    {{ $option->label() }}{{ $option->isCurrent() ? ' (current)' : '' }}
+                    {{ $option->label() }}{{ $option->isCurrent() ? ' ('.__('current').')' : '' }}
                 </option>
             @endforeach
         </select>
 
         @if (! $window->isCurrent())
             <a href="{{ route('admin.attendance-audit.index', ['week' => $window->next()->startDate()]) }}"
-               class="btn-ghost !p-2" aria-label="Next cut-off">
+               class="btn-ghost !p-2" aria-label="{{ __('Next cut-off') }}">
                 <x-icon name="chevron-right" class="h-4 w-4" />
             </a>
         @endif
@@ -32,62 +32,62 @@
     @php
         // Chart colours: validated for the dark card surface — see x-line-chart.
         $chartSeries = [
-            ['label' => 'Present', 'color' => '#199e70', 'values' => array_column($daily, 'present')],
-            ['label' => 'Absent', 'color' => '#d95926', 'values' => array_column($daily, 'absent')],
-            ['label' => 'Postponed', 'color' => '#3987e5', 'values' => array_column($daily, 'postponed')],
+            ['label' => __('Present'), 'color' => '#199e70', 'values' => array_column($daily, 'present')],
+            ['label' => __('Absent'), 'color' => '#d95926', 'values' => array_column($daily, 'absent')],
+            ['label' => __('Postponed'), 'color' => '#3987e5', 'values' => array_column($daily, 'postponed')],
         ];
     @endphp
 
     <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-        <x-stat-card label="Total earnings" :value="money($totals['earned'])" icon="wallet" tone="brand"
-                     hint="{{ money($totals['gross']) }} gross · −{{ money($totals['deductions']) }} deductions" />
+        <x-stat-card :label="__('Total earnings')" :value="money($totals['earned'])" icon="wallet" tone="brand"
+                     :hint="__(':gross gross · −:deductions deductions', ['gross' => money($totals['gross']), 'deductions' => money($totals['deductions'])])" />
 
-        <x-stat-card label="Total minutes" value="{{ number_format($totals['total_minutes']) }}" icon="clock"
-                     hint="All marked classes" />
+        <x-stat-card :label="__('Total minutes')" value="{{ number_format($totals['total_minutes']) }}" icon="clock"
+                     :hint="__('All marked classes')" />
 
-        <x-stat-card label="Minutes used" value="{{ number_format($totals['used_minutes']) }}" icon="check-circle"
-                     hint="Present classes only" />
+        <x-stat-card :label="__('Minutes used')" value="{{ number_format($totals['used_minutes']) }}" icon="check-circle"
+                     :hint="__('Present classes only')" />
 
         @foreach (App\Enums\TeachingMethod::cases() as $method)
-            <x-stat-card :label="$method->label().' minutes'"
+            <x-stat-card :label="__(':method minutes', ['method' => $method->label()])"
                          value="{{ number_format($totals['by_method'][$method->value]['total']) }}"
                          :icon="$method->isVideo() ? 'video' : 'chat'"
-                         hint="{{ number_format($totals['by_method'][$method->value]['used']) }} used (Present)" />
+                         :hint="__(':minutes used (Present)', ['minutes' => number_format($totals['by_method'][$method->value]['used'])])" />
         @endforeach
 
-        <x-stat-card label="Present" value="{{ number_format($totals['present']) }}" icon="check" tone="success" />
+        <x-stat-card :label="__('Present')" value="{{ number_format($totals['present']) }}" icon="check" tone="success" />
 
-        <x-stat-card label="Absent" value="{{ number_format($totals['absent']) }}" icon="x" tone="danger"
-                     hint="{{ $totals['student_absent'] }} student · {{ $totals['teacher_absent'] }} teacher" />
+        <x-stat-card :label="__('Absent')" value="{{ number_format($totals['absent']) }}" icon="x" tone="danger"
+                     :hint="__(':student student · :teacher teacher', ['student' => $totals['student_absent'], 'teacher' => $totals['teacher_absent']])" />
 
-        <x-stat-card label="Postponed" value="{{ number_format($totals['postponed']) }}" icon="refresh" tone="warning" />
+        <x-stat-card :label="__('Postponed')" value="{{ number_format($totals['postponed']) }}" icon="refresh" tone="warning" />
     </div>
 
     <x-card class="mt-6">
-        <x-slot:title>Classes per day</x-slot:title>
-        <x-slot:subtitle>Every teacher, {{ $window->label() }}</x-slot:subtitle>
+        <x-slot:title>{{ __('Classes per day') }}</x-slot:title>
+        <x-slot:subtitle>{{ __('Every teacher, :week', ['week' => $window->label()]) }}</x-slot:subtitle>
 
-        <x-line-chart :labels="array_map(fn ($day) => $day['date']->format('D j'), $daily)"
-                      :tooltip-labels="array_map(fn ($day) => $day['date']->format('l, M j'), $daily)"
+        <x-line-chart :labels="array_map(fn ($day) => $day['date']->translatedFormat('D j'), $daily)"
+                      :tooltip-labels="array_map(fn ($day) => $day['date']->translatedFormat('l, M j'), $daily)"
                       :series="$chartSeries" />
 
         <details class="mt-4 text-sm">
-            <summary class="cursor-pointer text-xs text-gray-400">Show as table</summary>
+            <summary class="cursor-pointer text-xs text-gray-400">{{ __('Show as table') }}</summary>
 
             <div class="table-wrap mt-2">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Day</th>
-                            <th class="text-right">Present</th>
-                            <th class="text-right">Absent</th>
-                            <th class="text-right">Postponed</th>
+                            <th>{{ __('Day') }}</th>
+                            <th class="text-right">{{ __('Present') }}</th>
+                            <th class="text-right">{{ __('Absent') }}</th>
+                            <th class="text-right">{{ __('Postponed') }}</th>
                         </tr>
                     </thead>
                     <tbody>
                         @foreach ($daily as $day)
                             <tr>
-                                <td class="whitespace-nowrap">{{ $day['date']->format('D, M j') }}</td>
+                                <td class="whitespace-nowrap">{{ $day['date']->translatedFormat('D, M j') }}</td>
                                 <td class="numeric text-right">{{ $day['present'] ?? '—' }}</td>
                                 <td class="numeric text-right">{{ $day['absent'] ?? '—' }}</td>
                                 <td class="numeric text-right">{{ $day['postponed'] ?? '—' }}</td>
@@ -100,15 +100,15 @@
     </x-card>
 
     <x-card class="mt-6" flush>
-        <x-slot:title>Teachers</x-slot:title>
+        <x-slot:title>{{ __('Teachers') }}</x-slot:title>
         <x-slot:subtitle>
-            No class type set counts as Audio, as payroll pays it. Earned is the live payroll figure: a class pays once its report is filed.
+            {{ __('No class type set counts as Audio, as payroll pays it. Earned is the live payroll figure: a class pays once its report is filed.') }}
         </x-slot:subtitle>
 
         @if ($teachers->isEmpty())
             <x-empty-state icon="chart"
-                           title="No marked classes in this cut-off"
-                           message="Once teachers mark Present, Absent or Postponed, their figures appear here." />
+                           :title="__('No marked classes in this cut-off')"
+                           :message="__('Once teachers mark Present, Absent or Postponed, their figures appear here.')" />
         @else
             <div class="table-wrap">
                 <table class="table">
@@ -116,22 +116,22 @@
                         {{-- Grouped so the column labels can stay short: ten columns
                              with full labels ran past the card at desktop width. --}}
                         <tr>
-                            <th rowspan="2" class="align-bottom">Teacher</th>
-                            <th colspan="5" class="border-l border-gray-700 text-center">Minutes</th>
-                            <th colspan="3" class="border-l border-gray-700 text-center">Classes</th>
-                            <th rowspan="2" class="border-l border-gray-700 text-right align-bottom">Earned</th>
+                            <th rowspan="2" class="align-bottom">{{ __('Teacher') }}</th>
+                            <th colspan="5" class="border-l border-gray-700 text-center">{{ __('Minutes') }}</th>
+                            <th colspan="3" class="border-l border-gray-700 text-center">{{ __('Classes') }}</th>
+                            <th rowspan="2" class="border-l border-gray-700 text-right align-bottom">{{ __('Earned') }}</th>
                         </tr>
                         <tr>
                             @foreach (App\Enums\TeachingMethod::cases() as $method)
-                                <th @class(['text-right', 'border-l border-gray-700' => $loop->first]) title="{{ $method->label() }} minutes">
+                                <th @class(['text-right', 'border-l border-gray-700' => $loop->first]) title="{{ __(':method minutes', ['method' => $method->label()]) }}">
                                     {{ str_replace(['(', ')'], '', $method->label()) }}
                                 </th>
                             @endforeach
-                            <th class="text-right">Total</th>
-                            <th class="text-right" title="Present classes only">Used</th>
-                            <th class="border-l border-gray-700 text-right">Present</th>
-                            <th class="text-right">Absent</th>
-                            <th class="text-right">Postponed</th>
+                            <th class="text-right">{{ __('Total') }}</th>
+                            <th class="text-right" title="{{ __('Present classes only') }}">{{ __('Used') }}</th>
+                            <th class="border-l border-gray-700 text-right">{{ __('Present') }}</th>
+                            <th class="text-right">{{ __('Absent') }}</th>
+                            <th class="text-right">{{ __('Postponed') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -150,7 +150,7 @@
                                     {{ $row['absent'] }}
                                     @if ($row['teacher_absent'] > 0)
                                         <span class="block whitespace-nowrap text-xs text-danger-400">
-                                            {{ $row['teacher_absent'] }} teacher
+                                            {{ __(':count teacher', ['count' => $row['teacher_absent']]) }}
                                         </span>
                                     @endif
                                 </td>
@@ -166,7 +166,7 @@
                     </tbody>
                     <tfoot>
                         <tr class="border-t border-gray-700 font-semibold text-white [&>td]:px-4 [&>td]:py-3">
-                            <td>Total</td>
+                            <td>{{ __('Total') }}</td>
                             @foreach (App\Enums\TeachingMethod::cases() as $method)
                                 <td class="numeric text-right">{{ number_format($totals['by_method'][$method->value]['total']) }}</td>
                             @endforeach

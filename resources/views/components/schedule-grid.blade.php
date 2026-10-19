@@ -9,8 +9,8 @@
 
 @if ($grid === null || $grid->isEmpty())
     <x-empty-state icon="calendar"
-                   title="No schedule published"
-                   message="This instructor has no availability on record, and none of their students have a timetable yet." />
+                   :title="__('No schedule published')"
+                   :message="__('This instructor has no availability on record, and none of their students have a timetable yet.')" />
 @else
     @if (! $grid->isDeclared)
         <p class="mb-3 rounded-lg bg-brand-500/10 px-3 py-2 text-xs text-brand-400">
@@ -27,7 +27,7 @@
 
             <thead>
                 <tr>
-                    <th scope="col" class="sticky left-0 z-10 bg-gray-800">Time</th>
+                    <th scope="col" class="sticky left-0 z-10 bg-gray-800">{{ __('Time') }}</th>
                     @foreach ($days as $dayName)
                         <th scope="col" class="text-center">
                             <abbr title="{{ $dayName }}" class="no-underline">{{ substr($dayName, 0, 3) }}</abbr>
@@ -51,12 +51,12 @@
                                 @if ($slot === null)
                                     <span class="text-xs text-gray-600">—</span>
                                 @elseif ($slot['status'] === App\Support\WeeklyScheduleGrid::AVAILABLE)
-                                    <span class="badge-success">Free</span>
+                                    <span class="badge-success">{{ __('Free') }}</span>
                                     <span class="numeric mt-1 block text-[11px] text-gray-500">
                                         {{ \Carbon\Carbon::parse($slot['start_time'])->format('g:i') }}–{{ \Carbon\Carbon::parse($slot['end_time'])->format('g:i A') }}
                                     </span>
                                 @else
-                                    <span class="badge-danger">Booked</span>
+                                    <span class="badge-danger">{{ __('Booked') }}</span>
                                     <span class="numeric mt-1 block text-[11px] text-gray-500">
                                         {{ \Carbon\Carbon::parse($slot['start_time'])->format('g:i') }}–{{ \Carbon\Carbon::parse($slot['end_time'])->format('g:i A') }}
                                     </span>

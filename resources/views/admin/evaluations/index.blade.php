@@ -1,12 +1,12 @@
 @extends('layouts.app')
 
-@section('title', 'Evaluation List')
-@section('heading', 'Evaluation List')
-@section('subheading', 'Instructors asking to mark a class that has already passed')
+@section('title', __('Evaluation List'))
+@section('heading', __('Evaluation List'))
+@section('subheading', __('Instructors asking to mark a class that has already passed'))
 
 @section('actions')
     <div class="flex flex-wrap items-center gap-1.5">
-        @foreach (['pending' => 'Pending', 'approved' => 'Approved', 'rejected' => 'Rejected', 'all' => 'All'] as $value => $label)
+        @foreach (['pending' => __('Pending'), 'approved' => __('Approved'), 'rejected' => __('Rejected'), 'all' => __('All')] as $value => $label)
             <a href="{{ route('admin.evaluations.index', ['status' => $value]) }}"
                @class(['btn-sm', 'btn-primary' => $filter === $value, 'btn-secondary' => $filter !== $value])>
                 {{ $label }}
@@ -23,27 +23,27 @@
          payment, which is why it is a decision and not a self-service button. --}}
     <x-card flush>
         <x-slot:title>
-            {{ $requests->total() }} {{ Str::plural('request', $requests->total()) }}
+            {{ trans_choice(':count request|:count requests', $requests->total()) }}
         </x-slot:title>
 
         <x-slot:subtitle>
-            Approving reopens Present, Absent and Postpone for that one class only.
+            {{ __('Approving reopens Present, Absent and Postpone for that one class only.') }}
         </x-slot:subtitle>
 
         @if ($requests->isEmpty())
             <x-empty-state icon="clipboard"
-                           title="Nothing waiting"
-                           message="When an instructor asks to mark a class after the day has passed, it appears here." />
+                           :title="__('Nothing waiting')"
+                           :message="__('When an instructor asks to mark a class after the day has passed, it appears here.')" />
         @else
             <div class="table-wrap">
                 <table class="table">
                     <thead>
                         <tr>
-                            <th>Class</th>
-                            <th>Instructor</th>
-                            <th>Reason</th>
-                            <th>Status</th>
-                            <th class="text-right">Decision</th>
+                            <th>{{ __('Class') }}</th>
+                            <th>{{ __('Instructor') }}</th>
+                            <th>{{ __('Reason') }}</th>
+                            <th>{{ __('Status') }}</th>
+                            <th class="text-right">{{ __('Decision') }}</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -52,10 +52,10 @@
                                 <td class="whitespace-nowrap">
                                     <span class="block font-medium text-white">{{ $item->student?->name ?? '—' }}</span>
                                     <span class="numeric text-xs text-gray-400">
-                                        {{ $item->class_date->format('D, M j, Y') }}
+                                        {{ $item->class_date->translatedFormat('D, M j, Y') }}
                                     </span>
                                     <span class="block text-xs text-gray-500">
-                                        asked {{ $item->created_at->diffForHumans() }}
+                                        {{ __('asked :time', ['time' => $item->created_at->diffForHumans()]) }}
                                     </span>
                                 </td>
 
@@ -68,23 +68,23 @@
 
                                     @if ($item->decision_note)
                                         <p class="mt-1 max-w-md text-xs text-gray-500">
-                                            Note: {{ $item->decision_note }}
+                                            {{ __('Note: :note', ['note' => $item->decision_note]) }}
                                         </p>
                                     @endif
                                 </td>
 
                                 <td class="whitespace-nowrap">
                                     @if ($item->isPending())
-                                        <span class="badge-warning">Pending</span>
+                                        <span class="badge-warning">{{ __('Pending') }}</span>
                                     @elseif ($item->isApproved())
-                                        <span class="badge-success">Approved</span>
+                                        <span class="badge-success">{{ __('Approved') }}</span>
                                     @else
-                                        <span class="badge-danger">Rejected</span>
+                                        <span class="badge-danger">{{ __('Rejected') }}</span>
                                     @endif
 
                                     @if ($item->decided_at)
                                         <span class="mt-0.5 block text-xs text-gray-500">
-                                            by {{ $item->decidedBy?->name ?? 'system' }}
+                                            {{ __('by :name', ['name' => $item->decidedBy?->name ?? __('system')]) }}
                                         </span>
                                     @endif
                                 </td>
@@ -101,18 +101,18 @@
                                                    name="decision_note"
                                                    maxlength="1000"
                                                    class="form-input !w-48 !py-1.5 text-xs"
-                                                   placeholder="Note (optional)">
+                                                   placeholder="{{ __('Note (optional)') }}">
 
                                             <div class="flex gap-1.5">
                                                 <button type="submit" name="decision" value="approved"
-                                                        class="btn-primary btn-sm">Approve</button>
+                                                        class="btn-primary btn-sm">{{ __('Approve') }}</button>
                                                 <button type="submit" name="decision" value="rejected"
-                                                        class="btn-danger btn-sm">Reject</button>
+                                                        class="btn-danger btn-sm">{{ __('Reject') }}</button>
                                             </div>
                                         </form>
                                     @else
                                         <p class="text-right text-xs text-gray-500">
-                                            {{ $item->decided_at?->format('M j, Y') ?? '—' }}
+                                            {{ $item->decided_at?->translatedFormat('M j, Y') ?? '—' }}
                                         </p>
                                     @endif
                                 </td>

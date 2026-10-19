@@ -34,11 +34,18 @@ final class Navigation
      */
     public static function for(User $user): array
     {
-        return match (true) {
+        $groups = match (true) {
             $user->isAdmin() => self::admin(),
             $user->isStudent() => self::student(),
             default => self::instructor(),
         };
+
+        // Translated here rather than at each label: only the admin pages ever
+        // run in another language (SetAdminLocale), so the others read as written.
+        return array_map(fn (array $group) => [
+            ...$group,
+            'label' => $group['label'] === null ? null : __($group['label']),
+        ], $groups);
     }
 
     /**
@@ -232,7 +239,7 @@ final class Navigation
         }
 
         return [
-            'label' => $label,
+            'label' => __($label),
             'url' => route($route, $query),
             'icon' => $icon,
             'active' => self::isActive($route, $query),

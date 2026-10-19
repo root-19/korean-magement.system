@@ -8,7 +8,6 @@ use App\Models\LearningMaterial;
 use App\Models\LearningMaterialFolder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 use Illuminate\View\View;
 
 /**
@@ -81,8 +80,8 @@ class LearningMaterialController extends Controller
         );
 
         return back()->with('success', $published
-            ? "\"{$material->title}\" is published and visible to instructors."
-            : "\"{$material->title}\" is saved as a draft. Publish it when it is ready.");
+            ? __('":title" is published and visible to instructors.', ['title' => $material->title])
+            : __('":title" is saved as a draft. Publish it when it is ready.', ['title' => $material->title]));
     }
 
     public function storeFolder(Request $request): RedirectResponse
@@ -94,7 +93,7 @@ class LearningMaterialController extends Controller
 
         LearningMaterialFolder::create($data + ['created_by' => $request->user()->id]);
 
-        return back()->with('success', "Folder \"{$data['name']}\" created.");
+        return back()->with('success', __('Folder ":name" created.', ['name' => $data['name']]));
     }
 
     /**
@@ -116,8 +115,12 @@ class LearningMaterialController extends Controller
         );
 
         return back()->with('success', $count > 0
-            ? "Folder \"{$name}\" removed. Its {$count} ".Str::plural('material', $count).' moved to Uncategorised.'
-            : "Folder \"{$name}\" removed.");
+            ? trans_choice(
+                'Folder ":name" removed. Its :count material moved to Uncategorised.|Folder ":name" removed. Its :count materials moved to Uncategorised.',
+                $count,
+                ['name' => $name],
+            )
+            : __('Folder ":name" removed.', ['name' => $name]));
     }
 
     /**
@@ -138,8 +141,8 @@ class LearningMaterialController extends Controller
         );
 
         return back()->with('success', $material->is_published
-            ? "\"{$material->title}\" is now visible to instructors."
-            : "\"{$material->title}\" is hidden from instructors.");
+            ? __('":title" is now visible to instructors.', ['title' => $material->title])
+            : __('":title" is hidden from instructors.', ['title' => $material->title]));
     }
 
     /**
@@ -158,6 +161,6 @@ class LearningMaterialController extends Controller
             userId: $request->user()->id,
         );
 
-        return back()->with('success', "\"{$title}\" was deleted.");
+        return back()->with('success', __('":title" was deleted.', ['title' => $title]));
     }
 }

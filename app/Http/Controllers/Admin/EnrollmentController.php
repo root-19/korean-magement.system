@@ -49,7 +49,7 @@ class EnrollmentController extends Controller
     {
         $this->enrollments->approve($request->user(), $enrollment);
 
-        return back()->with('success', "{$enrollment->user?->name} approved.");
+        return back()->with('success', __(':name approved.', ['name' => $enrollment->user?->name]));
     }
 
     public function reject(Request $request, StudentProfile $enrollment): RedirectResponse
@@ -60,14 +60,14 @@ class EnrollmentController extends Controller
 
         $this->enrollments->reject($request->user(), $enrollment, $data['reason'] ?? null);
 
-        return back()->with('success', "{$enrollment->user?->name} rejected and deactivated.");
+        return back()->with('success', __(':name rejected and deactivated.', ['name' => $enrollment->user?->name]));
     }
 
     public function reinstate(Request $request, StudentProfile $enrollment): RedirectResponse
     {
         $this->enrollments->reinstate($request->user(), $enrollment);
 
-        return back()->with('success', "{$enrollment->user?->name} reinstated.");
+        return back()->with('success', __(':name reinstated.', ['name' => $enrollment->user?->name]));
     }
 
     /**
