@@ -6,7 +6,9 @@ use App\Enums\Party;
 use App\Enums\SessionStatus;
 use App\Models\ClassSession;
 use App\Models\User;
+use App\Services\Earnings\EarningsCalculator;
 use App\Support\PayoutWindow;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Collection;
 
 /**
@@ -21,9 +23,15 @@ use Illuminate\Support\Collection;
  *
  * The class length is the student's current `learning_time`, the same figure
  * EarningsCalculator pays on.
+ *
+ * Earnings come from EarningsCalculator, not from the counts here: a class pays
+ * only once its report is filed, trials and teacher absences have their own
+ * rules, and the Payroll page shows the same live figure.
  */
 class CutoffAudit
 {
+    public function __construct(private readonly EarningsCalculator $earnings) {}
+
     /**
      * @return array{
      *     teachers: Collection<int, array<string, mixed>>,
@@ -43,7 +51,7 @@ class CutoffAudit
             ->toBase()
             ->get();
 
-        $teachers = $this->byTeacher($groups);
+        $teachers = $this->byTeacher($groups, $window);
 
         return [
             'teachers' => $teachers,
@@ -55,7 +63,7 @@ class CutoffAudit
     /**
      * @return Collection<int, array<string, mixed>>
      */
-    private function byTeacher(Collection $groups): Collection
+    private function byTeacher(Collection $groups, PayoutWindow $window): Collection
     {
         // withTrashed: a teacher removed since still taught these classes.
         $names = User::withTrashed()
@@ -64,43 +72,56 @@ class CutoffAudit
 
         return $groups
             ->groupBy('instructor_id')
-            ->map(fn (Collection $rows, int $instructorId) => array_merge(
-                ['instructor_id' => $instructorId, 'name' => $names->get($instructorId, '(removed)')],
-                $this->tally($rows),
-            ))
+            ->map(function (Collection $rows, int $instructorId) use ($names, $window) {
+                $summary = $this->earnings->forWindow($instructorId, $window);
+
+                return array_merge(
+                    ['instructor_id' => $instructorId, 'name' => $names->get($instructorId, '(removed)')],
+                    $this->tally($rows),
+                    ['gross' => $summary->gross(), 'deductions' => $summary->deductions(), 'earned' => $summary->net()],
+                );
+            })
             ->sortByDesc('total_minutes')
             ->values();
     }
 
     /**
-     * @return array<string, int>
+     * @return array<string, int|float>
      */
     private function totals(Collection $teachers): array
     {
-        return collect(['present', 'absent', 'student_absent', 'teacher_absent', 'postponed', 'total_minutes', 'used_minutes'])
-            ->mapWithKeys(fn (string $key) => [$key => (int) $teachers->sum($key)])
-            ->all();
+        $counts = collect(['present', 'absent', 'student_absent', 'teacher_absent', 'postponed', 'total_minutes', 'used_minutes'])
+            ->mapWithKeys(fn (string $key) => [$key => (int) $teachers->sum($key)]);
+
+        $money = collect(['gross', 'deductions', 'earned'])
+            ->mapWithKeys(fn (string $key) => [$key => round((float) $teachers->sum($key), 2)]);
+
+        return $counts->merge($money)->all();
     }
 
     /**
-     * One entry per day of the cut-off, days without classes included, so the
-     * chart's x-axis is the whole week.
+     * One entry per day of the cut-off, so the chart's x-axis is the whole week.
+     *
+     * A day that has not come yet is null, not zero: nothing can have been marked
+     * on it, and plotting it as 0 drew every line down to the floor mid-week.
      *
      * @return array<int, array<string, mixed>>
      */
     private function byDay(Collection $groups, PayoutWindow $window): array
     {
         $byDate = $groups->groupBy(fn (object $row) => substr((string) $row->paid_date, 0, 10));
+        $today = CarbonImmutable::today();
         $days = [];
 
         for ($day = $window->start; $day->lte($window->end); $day = $day->addDay()) {
             $tally = $this->tally($byDate->get($day->toDateString(), collect()));
+            $upcoming = $day->gt($today);
 
             $days[] = [
                 'date' => $day,
-                'present' => $tally['present'],
-                'absent' => $tally['absent'],
-                'postponed' => $tally['postponed'],
+                'present' => $upcoming ? null : $tally['present'],
+                'absent' => $upcoming ? null : $tally['absent'],
+                'postponed' => $upcoming ? null : $tally['postponed'],
             ];
         }
 

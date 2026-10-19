@@ -6,6 +6,8 @@ use App\Enums\EnrollmentStatus;
 use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Models\User;
+use App\Services\Earnings\EarningsCalculator;
+use App\Support\PayoutWindow;
 use Carbon\Carbon;
 use Carbon\CarbonImmutable;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -30,11 +32,15 @@ class AttendanceAuditTest extends TestCase
     {
         parent::setUp();
 
-        config(['academy.payout.week_starts_on' => 6]);
+        config([
+            'academy.payout.week_starts_on' => 6,
+            // Pay every settled class, so the earnings figures are not all zero.
+            'academy.feedback_required_from' => '2030-01-01',
+            'academy.trial_unpaid_from' => '',
+        ]);
 
-        // Wednesday: the cut-off runs Saturday Sep 12 to Friday Sep 18.
-        Carbon::setTestNow('2026-09-16 10:00:00');
-        CarbonImmutable::setTestNow('2026-09-16 10:00:00');
+        // Friday night: the cut-off, Saturday Sep 12 to Friday Sep 18, is complete.
+        $this->clockAt('2026-09-18 22:00:00');
 
         $this->admin = User::factory()->admin()->create();
         $this->ana = User::factory()->instructor()->create(['name' => 'Teacher Ana']);
@@ -69,6 +75,12 @@ class AttendanceAuditTest extends TestCase
         parent::tearDown();
     }
 
+    private function clockAt(string $moment): void
+    {
+        Carbon::setTestNow($moment);
+        CarbonImmutable::setTestNow($moment);
+    }
+
     private function student(User $instructor, int $minutes): User
     {
         $student = User::factory()->student()->create();
@@ -100,6 +112,8 @@ class AttendanceAuditTest extends TestCase
     #[Test]
     public function it_totals_minutes_and_attendance_for_the_cut_off(): void
     {
+        $totals = $this->page()->viewData('totals');
+
         $this->assertSame([
             'present' => 4,
             'absent' => 2,
@@ -108,7 +122,43 @@ class AttendanceAuditTest extends TestCase
             'postponed' => 1,
             'total_minutes' => 5 * 25 + 2 * 50,
             'used_minutes' => 3 * 25 + 1 * 50,
-        ], $this->page()->viewData('totals'));
+        ], array_diff_key($totals, array_flip(['gross', 'deductions', 'earned'])));
+    }
+
+    #[Test]
+    public function earnings_are_the_payroll_figures_for_the_same_cut_off(): void
+    {
+        $window = PayoutWindow::forDate('2026-09-18');
+        $calculator = app(EarningsCalculator::class);
+        $ana = $calculator->forWindow($this->ana->id, $window);
+        $ben = $calculator->forWindow($this->ben->id, $window);
+
+        $view = $this->page();
+        $teachers = $view->viewData('teachers')->keyBy('name');
+        $totals = $view->viewData('totals');
+
+        $this->assertGreaterThan(0, $ana->net());
+        $this->assertGreaterThan(0, $ben->deductions(), "Ben's teacher absence is deducted");
+
+        $this->assertSame($ana->net(), $teachers['Teacher Ana']['earned']);
+        $this->assertSame($ben->net(), $teachers['Teacher Ben']['earned']);
+        $this->assertSame($ben->deductions(), $teachers['Teacher Ben']['deductions']);
+        $this->assertSame(round($ana->net() + $ben->net(), 2), $totals['earned']);
+        $this->assertSame(round($ana->gross() + $ben->gross(), 2), $totals['gross']);
+
+        $view->assertSee('Total earnings')->assertSee(money($totals['earned']));
+    }
+
+    #[Test]
+    public function days_still_to_come_are_left_off_the_chart_not_drawn_as_zero(): void
+    {
+        $this->clockAt('2026-09-16 10:00:00');
+
+        $daily = collect($this->page()->viewData('daily'))->keyBy(fn (array $day) => $day['date']->toDateString());
+
+        $this->assertSame([0, 1, 0], [$daily['2026-09-16']['present'], $daily['2026-09-16']['absent'], $daily['2026-09-16']['postponed']]);
+        $this->assertNull($daily['2026-09-17']['present']);
+        $this->assertNull($daily['2026-09-18']['postponed']);
     }
 
     #[Test]

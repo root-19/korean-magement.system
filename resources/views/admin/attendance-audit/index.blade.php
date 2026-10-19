@@ -38,11 +38,14 @@
         ];
     @endphp
 
-    <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-5">
+    <div class="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <x-stat-card label="Total earnings" :value="money($totals['earned'])" icon="wallet" tone="brand"
+                     hint="{{ money($totals['gross']) }} gross · −{{ money($totals['deductions']) }} deductions" />
+
         <x-stat-card label="Total minutes" value="{{ number_format($totals['total_minutes']) }}" icon="clock"
                      hint="All marked classes" />
 
-        <x-stat-card label="Minutes used" value="{{ number_format($totals['used_minutes']) }}" icon="check-circle" tone="brand"
+        <x-stat-card label="Minutes used" value="{{ number_format($totals['used_minutes']) }}" icon="check-circle"
                      hint="Present classes only" />
 
         <x-stat-card label="Present" value="{{ number_format($totals['present']) }}" icon="check" tone="success" />
@@ -78,9 +81,9 @@
                         @foreach ($daily as $day)
                             <tr>
                                 <td class="whitespace-nowrap">{{ $day['date']->format('D, M j') }}</td>
-                                <td class="numeric text-right">{{ $day['present'] }}</td>
-                                <td class="numeric text-right">{{ $day['absent'] }}</td>
-                                <td class="numeric text-right">{{ $day['postponed'] }}</td>
+                                <td class="numeric text-right">{{ $day['present'] ?? '—' }}</td>
+                                <td class="numeric text-right">{{ $day['absent'] ?? '—' }}</td>
+                                <td class="numeric text-right">{{ $day['postponed'] ?? '—' }}</td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -93,6 +96,7 @@
         <x-slot:title>Teachers</x-slot:title>
         <x-slot:subtitle>
             Minutes use each student's class length. Classes are counted in the cut-off their payslip falls in.
+            Earned is the live payroll figure: a class pays once its report is filed.
         </x-slot:subtitle>
 
         @if ($teachers->isEmpty())
@@ -110,6 +114,7 @@
                             <th class="text-right">Present</th>
                             <th class="text-right">Absent</th>
                             <th class="text-right">Postponed</th>
+                            <th class="text-right">Earned</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -128,6 +133,12 @@
                                     @endif
                                 </td>
                                 <td class="numeric text-right">{{ $row['postponed'] }}</td>
+                                <td class="numeric whitespace-nowrap text-right font-semibold text-brand-400">
+                                    @money($row['earned'])
+                                    @if ($row['deductions'] > 0)
+                                        <span class="block text-xs font-normal text-danger-400">−@money($row['deductions'])</span>
+                                    @endif
+                                </td>
                             </tr>
                         @endforeach
                     </tbody>
@@ -139,6 +150,7 @@
                             <td class="numeric text-right">{{ $totals['present'] }}</td>
                             <td class="numeric text-right">{{ $totals['absent'] }}</td>
                             <td class="numeric text-right">{{ $totals['postponed'] }}</td>
+                            <td class="numeric whitespace-nowrap text-right text-brand-400">@money($totals['earned'])</td>
                         </tr>
                     </tfoot>
                 </table>

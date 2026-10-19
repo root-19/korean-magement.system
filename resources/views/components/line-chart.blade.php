@@ -1,6 +1,6 @@
 @props([
     'labels',          // x-axis labels, one per point
-    'series',          // [['label' => string, 'color' => hex, 'values' => int[]], ...]
+    'series',          // [['label' => string, 'color' => hex, 'values' => (int|null)[]], ...] — null = no data yet
     'tooltipLabels' => null, // longer x labels for the tooltip; defaults to $labels
     'surface' => '#1f2937',  // card surface, for the marker rings
 ])
@@ -23,7 +23,8 @@
     $plotH = $height - $pad['top'] - $pad['bottom'];
 
     $count = count($labels);
-    $max = max(1, ...array_map(fn ($s) => max([0, ...$s['values']]), $series));
+    $known = fn (array $values) => array_filter($values, fn ($v) => $v !== null);
+    $max = max(1, ...array_map(fn ($s) => max([0, ...$known($s['values'])]), $series));
 
     // Clean tick step: 1, 2 or 5 × 10^n, about four intervals.
     $raw = $max / 4;
@@ -35,9 +36,26 @@
     $x = fn (int $i) => $pad['left'] + ($count > 1 ? $i * $plotW / ($count - 1) : $plotW / 2);
     $y = fn (int|float $v) => $pad['top'] + $plotH - ($v / $top) * $plotH;
 
-    // End labels: keep one only if it sits clear of the last one kept.
+    // A line is drawn through consecutive known values only, so a day with no
+    // data yet breaks it instead of pulling it to zero.
+    $segments = fn (array $values) => collect($values)
+        ->map(fn ($v, $i) => $v === null ? null : $x($i).','.$y($v))
+        ->chunkWhile(fn ($point, $i, $chunk) => ($point === null) === ($chunk->last() === null))
+        ->reject(fn ($chunk) => $chunk->first() === null)
+        ->map(fn ($chunk) => $chunk->implode(' '));
+
+    // End labels sit on each series' last known point; one is kept only if it
+    // is clear of the last one kept.
     $endLabels = collect($series)
-        ->map(fn ($s) => ['label' => $s['label'], 'value' => end($s['values']), 'y' => $y(end($s['values']))])
+        ->map(function ($s) use ($known, $y) {
+            $values = $known($s['values']);
+            $last = array_key_last($values);
+
+            return $last === null ? null : [
+                'label' => $s['label'], 'value' => $values[$last], 'index' => $last, 'y' => $y($values[$last]),
+            ];
+        })
+        ->filter()
         ->sortBy('y')
         ->reduce(function ($kept, $label) {
             $last = $kept->last();
@@ -90,17 +108,19 @@
                   y1="{{ $pad['top'] }}" y2="{{ $pad['top'] + $plotH }}" stroke="#6b7280" stroke-width="1" />
 
             @foreach ($series as $s)
-                <polyline fill="none" stroke="{{ $s['color'] }}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
-                          points="{{ collect($s['values'])->map(fn ($v, $i) => $x($i).','.$y($v))->implode(' ') }}" />
+                @foreach ($segments($s['values']) as $points)
+                    <polyline fill="none" stroke="{{ $s['color'] }}" stroke-width="2" stroke-linejoin="round" stroke-linecap="round"
+                              points="{{ $points }}" />
+                @endforeach
 
-                @foreach ($s['values'] as $i => $v)
+                @foreach ($known($s['values']) as $i => $v)
                     <circle cx="{{ $x($i) }}" cy="{{ $y($v) }}" r="4" fill="{{ $s['color'] }}"
                             stroke="{{ $surface }}" stroke-width="2" />
                 @endforeach
             @endforeach
 
             @foreach ($endLabels as $end)
-                <text x="{{ $x($count - 1) + 10 }}" y="{{ $end['y'] + 4 }}" class="fill-gray-300" font-size="11"
+                <text x="{{ $x($end['index']) + 10 }}" y="{{ $end['y'] + 4 }}" class="fill-gray-300" font-size="11"
                       style="font-variant-numeric: tabular-nums">{{ $end['value'] }} {{ $end['label'] }}</text>
             @endforeach
 
@@ -109,7 +129,7 @@
                 <rect x="{{ $x($i) - ($count > 1 ? $plotW / ($count - 1) / 2 : $plotW / 2) }}" y="0"
                       width="{{ $count > 1 ? $plotW / ($count - 1) : $plotW }}" height="{{ $height }}"
                       fill="transparent" tabindex="0" class="focus:outline-none"
-                      aria-label="{{ ($tooltipLabels ?? $labels)[$i] }}: {{ collect($series)->map(fn ($s) => $s['label'].' '.$s['values'][$i])->implode(', ') }}"
+                      aria-label="{{ ($tooltipLabels ?? $labels)[$i] }}: {{ collect($series)->map(fn ($s) => $s['label'].' '.($s['values'][$i] ?? 'no data yet'))->implode(', ') }}"
                       x-on:mouseenter="active = {{ $i }}" x-on:focus="active = {{ $i }}" x-on:blur="active = null" />
             @endforeach
         </svg>
@@ -121,7 +141,7 @@
                 <template x-for="row in points[active].rows" x-bind:key="row.label">
                     <p class="flex items-center gap-2">
                         <span class="inline-block h-0.5 w-3 rounded" x-bind:style="`background: ${row.color}`"></span>
-                        <span class="numeric font-semibold text-white" x-text="row.value"></span>
+                        <span class="numeric font-semibold text-white" x-text="row.value ?? '—'"></span>
                         <span class="text-gray-400" x-text="row.label"></span>
                     </p>
                 </template>
