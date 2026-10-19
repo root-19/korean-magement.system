@@ -1,5 +1,6 @@
 <?php
 
+use App\Http\Controllers\Admin\AttendanceAuditController;
 use App\Http\Controllers\Admin\AttendanceRequestController as AdminEvaluations;
 use App\Http\Controllers\Admin\ClassSessionController as AdminClassSessions;
 use App\Http\Controllers\Admin\DashboardController as AdminDashboard;
@@ -273,6 +274,7 @@ Route::middleware(['auth', 'role:admin'])
 
         // Payroll
         Route::get('/payouts', [PayoutController::class, 'index'])->name('payouts.index');
+        Route::get('/attendance-audit', AttendanceAuditController::class)->name('attendance-audit.index');
         Route::post('/payouts/week', [PayoutController::class, 'finaliseWeek'])->name('payouts.finalise-week');
         Route::post('/payouts/{instructor}', [PayoutController::class, 'finalise'])->name('payouts.finalise');
         Route::patch('/payouts/{payout}/paid', [PayoutController::class, 'markPaid'])->name('payouts.paid');

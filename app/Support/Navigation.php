@@ -174,6 +174,7 @@ final class Navigation
                 'label' => 'Payroll',
                 'items' => [
                     self::item('Instructor Earn', 'admin.payouts.index', 'wallet'),
+                    self::item('Audit System', 'admin.attendance-audit.index', 'chart'),
                 ],
             ],
             [
