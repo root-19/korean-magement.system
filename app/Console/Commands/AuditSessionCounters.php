@@ -66,6 +66,7 @@ class AuditSessionCounters extends Command
                             {--include-inactive : Also check deactivated and unapproved students}
                             {--show-ok : List students whose counters agree, too}
                             {--show-unverifiable : List students with no usable purchase anchor}
+                            {--overclassed : Only list students marked past the end of their plan, with the extra classes}
                             {--csv= : Also write every checked student to this path}';
 
     protected $description = 'Report students whose session counters disagree with class_sessions (read-only)';
@@ -93,6 +94,10 @@ class AuditSessionCounters extends Command
                 $anchors->get($profile->user_id),
             ))
             ->values();
+
+        if ($this->option('overclassed')) {
+            return $this->reportOverclassed($rows);
+        }
 
         $this->report($rows);
 
@@ -263,6 +268,8 @@ class AuditSessionCounters extends Command
             'remaining' => $remaining,
             'remaining_expected' => null,
             'remaining_delta' => null,
+            'plan' => null,
+            'overage' => null,
             'basis' => null,
         ];
 
@@ -291,9 +298,40 @@ class AuditSessionCounters extends Command
 
         $row['remaining_expected'] = $expected;
         $row['remaining_delta'] = $expected - $remaining;
+        $row['plan'] = $anchor['purchased'] - $anchor['deducted'] + $teacherAbsent;
+        // Below zero only when more classes were counted than the plan held —
+        // what AttendanceService allowed before it refused a used-up plan, with
+        // sessions_remaining clamped at 0 so the counters alone never showed it.
+        $row['overage'] = max(0, -$expected);
         $row['basis'] = 'enrolled with '.$anchor['purchased'];
 
         return $row;
+    }
+
+    /**
+     * The most recently marked consumed classes for each over-classed student —
+     * as many as they are over by. Classes are counted in the order they were
+     * marked, so the ones past the end of the plan are the last ones.
+     *
+     * @param  Collection<int, array<string, mixed>>  $over  keyed by student id
+     * @return Collection<int, Collection<int, object>>
+     */
+    private function extraClasses(Collection $over): Collection
+    {
+        return DB::table('class_sessions as cs')
+            ->leftJoin('users as t', 't.id', '=', 'cs.instructor_id')
+            ->whereIn('cs.student_id', $over->keys())
+            ->where(fn ($q) => $q->where('cs.status', SessionStatus::Present->value)
+                ->orWhere(fn ($q) => $q->where('cs.status', SessionStatus::Absent->value)
+                    ->where('cs.absent_by', Party::Student->value)))
+            ->orderByDesc('cs.marked_at')
+            ->orderByDesc('cs.id')
+            ->get(['cs.student_id', 'cs.paid_date', 'cs.status', 't.name as instructor_name'])
+            ->groupBy(fn (object $session) => (int) $session->student_id)
+            ->map(fn (Collection $sessions, int $studentId) => $sessions
+                ->take($over->get($studentId)['overage'])
+                ->reverse()
+                ->values());
     }
 
     // ------------------------------------------------------------------- output
@@ -394,6 +432,66 @@ class AuditSessionCounters extends Command
     }
 
     /**
+     * Students charged more classes than their plan held, and which classes.
+     *
+     * @param  Collection<int, array<string, mixed>>  $rows
+     */
+    private function reportOverclassed(Collection $rows): int
+    {
+        $over = $rows->filter(fn (array $row) => ($row['overage'] ?? 0) > 0)->keyBy('student_id');
+        $unverifiable = $rows->whereNull('overage')->count();
+
+        $this->newLine();
+
+        if ($over->isEmpty()) {
+            $this->info('✓ No checkable student was marked past the end of their plan.');
+        } else {
+            $extra = $this->extraClasses($over);
+
+            $this->error(sprintf(
+                '%d %s marked past the end of their plan (%d extra %s):',
+                $over->count(),
+                Str::plural('student', $over->count()).($over->count() === 1 ? ' was' : ' were'),
+                $over->sum('overage'),
+                Str::plural('class', $over->sum('overage')),
+            ));
+
+            $this->table(
+                ['Instructor', 'Student', 'Plan', 'Counted', 'Over', 'Extra classes'],
+                $over->map(fn (array $row) => [
+                    mb_substr((string) $row['instructor'], 0, 20),
+                    mb_substr((string) $row['student'], 0, 22),
+                    $row['plan'],
+                    $row['present'] + $row['student_absent'],
+                    '+'.$row['overage'],
+                    $extra->get($row['student_id'], collect())
+                        ->map(fn (object $session) => sprintf(
+                            '%s %s (%s)',
+                            substr((string) $session->paid_date, 0, 10),
+                            $session->status === SessionStatus::Present->value ? 'present' : 'student absent',
+                            $session->instructor_name ?? '?',
+                        ))
+                        ->implode(', '),
+                ])->values()->all(),
+            );
+
+            $this->line('Nothing here has been changed. Each extra class was paid to the');
+            $this->line('instructor shown; correct the counters on the student edit page.');
+        }
+
+        if ($unverifiable > 0) {
+            $this->newLine();
+            $this->comment(sprintf(
+                '%d %s not checked: no enrolment record, or counters edited by an admin since.',
+                $unverifiable,
+                Str::plural('student', $unverifiable).($unverifiable === 1 ? ' was' : ' were'),
+            ));
+        }
+
+        return $over->isEmpty() ? self::SUCCESS : self::FAILURE;
+    }
+
+    /**
      * @param  Collection<int, array<string, mixed>>  $rows
      */
     private function renderTable(Collection $rows): void
@@ -444,7 +542,7 @@ class AuditSessionCounters extends Command
             'present_rows', 'student_absent_rows', 'teacher_absent_rows',
             'attended', 'attended_expected', 'attended_delta',
             'remaining', 'remaining_expected', 'remaining_delta',
-            'basis',
+            'basis', 'overage',
         ]);
 
         foreach ($rows as $row) {
@@ -453,7 +551,7 @@ class AuditSessionCounters extends Command
                 $row['present'], $row['student_absent'], $row['teacher_absent'],
                 $row['attended'], $row['attended_expected'], $row['attended_delta'],
                 $row['remaining'], $row['remaining_expected'] ?? '', $row['remaining_delta'] ?? '',
-                $row['basis'],
+                $row['basis'], $row['overage'] ?? '',
             ]);
         }
 

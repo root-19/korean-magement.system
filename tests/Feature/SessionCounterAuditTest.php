@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\Party;
 use App\Enums\SessionStatus;
 use App\Models\AuditLog;
+use App\Models\ClassSession;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\Attendance\AttendanceService;
@@ -277,6 +278,64 @@ class SessionCounterAuditTest extends TestCase
         $this->assertSame(1, $result['code']);
         $this->assertStringContainsString('Iris Theirs', $result['output']);
         $this->assertStringNotContainsString('Hana Mine', $result['output']);
+    }
+
+    /**
+     * A third class counted on a two-class plan, the way AttendanceService left
+     * it before it refused a used-up plan: remaining clamped at 0, attended +1.
+     */
+    private function overclass(User $student, string $date): void
+    {
+        ClassSession::factory()->present()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $student->id,
+            'scheduled_date' => $date,
+            'marked_at' => now()->addMinute(),
+        ]);
+
+        $this->profile($student)->increment('sessions_attended');
+    }
+
+    #[Test]
+    public function it_lists_a_student_marked_past_the_end_of_their_plan(): void
+    {
+        $student = $this->enrol('Olly Over', 2);
+
+        app(AttendanceService::class)->mark($this->instructor, $student, '2025-08-04', SessionStatus::Present);
+        app(AttendanceService::class)->mark($this->instructor, $student, '2025-08-11', SessionStatus::Present);
+        $this->overclass($student, '2025-08-18');
+
+        $this->assertSame(0, $this->profile($student)->sessions_remaining);
+
+        $result = $this->audit(['--overclassed' => true]);
+
+        $this->assertSame(1, $result['code']);
+        $this->assertStringContainsString('1 student was marked past the end of their plan (1 extra class)', $result['output']);
+        $this->assertStringContainsString('Olly Over', $result['output']);
+        $this->assertStringContainsString('+1', $result['output']);
+        $this->assertStringContainsString('2025-08-18 present (Teacher Ana)', $result['output']);
+        $this->assertStringNotContainsString('2025-08-11', $result['output']);
+    }
+
+    #[Test]
+    public function a_plan_used_exactly_or_topped_up_by_a_teacher_absence_is_not_overclassed(): void
+    {
+        $exact = $this->enrol('Eve Exact', 2);
+        app(AttendanceService::class)->mark($this->instructor, $exact, '2025-08-04', SessionStatus::Present);
+        app(AttendanceService::class)->mark($this->instructor, $exact, '2025-08-11', SessionStatus::Present);
+
+        // Two bought, plus the make-good class for the teacher's absence: three.
+        $credited = $this->enrol('Cy Credited', 2);
+        $service = app(AttendanceService::class);
+        $service->mark($this->instructor, $credited, '2025-08-04', SessionStatus::Absent, Party::Teacher);
+        $service->mark($this->instructor, $credited, '2025-08-11', SessionStatus::Present);
+        $service->mark($this->instructor, $credited, '2025-08-18', SessionStatus::Present);
+        $service->mark($this->instructor, $credited, '2025-08-25', SessionStatus::Present);
+
+        $result = $this->audit(['--overclassed' => true]);
+
+        $this->assertSame(0, $result['code']);
+        $this->assertStringContainsString('No checkable student was marked past the end of their plan', $result['output']);
     }
 
     #[Test]
