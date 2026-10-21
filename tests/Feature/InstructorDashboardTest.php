@@ -100,6 +100,39 @@ class InstructorDashboardTest extends TestCase
     }
 
     #[Test]
+    public function an_unreported_session_of_an_archived_student_does_not_break_the_dashboard(): void
+    {
+        // Archiving a student with a taught, unreported class this week used to
+        // null the eager-loaded relation and 500 the whole dashboard.
+        $archived = User::factory()->student()->create(['name' => 'A902 Archived Student']);
+
+        StudentProfile::factory()->create([
+            'user_id' => $archived->id,
+            'instructor_id' => $this->instructor->id,
+            'enrollment_status' => EnrollmentStatus::Approved,
+        ]);
+
+        ClassSession::factory()->present()->create([
+            'instructor_id' => $this->instructor->id,
+            'student_id' => $archived->id,
+            'scheduled_date' => now()->toDateString(),
+        ]);
+
+        $archived->delete();
+
+        $this->actingAs($this->instructor)
+            ->get(route('instructor.dashboard'))
+            ->assertOk()
+            ->assertSee('awaiting a report')
+            ->assertSee('A902 Archived Student')
+            ->assertSee('Archived')
+            ->assertDontSee(route('instructor.reports.create', [
+                'student_id' => $archived->id,
+                'date' => now()->toDateString(),
+            ]), false);
+    }
+
+    #[Test]
     public function tomorrows_schedule_lists_students_timetabled_tomorrow(): void
     {
         $this->actingAs($this->instructor)

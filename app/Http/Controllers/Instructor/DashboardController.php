@@ -310,7 +310,14 @@ class DashboardController extends Controller
             // The enrolment type comes along so the list can say which of these
             // are trials: they still owe the student a report, but from
             // academy.trial_unpaid_from they no longer owe the instructor pay.
-            ->with(['student:id,name,avatar_path', 'student.studentProfile:user_id,is_regular'])
+            //
+            // withTrashed on the student: a class taught before the student was
+            // archived is still settled work in this window. Without it the
+            // relation resolves to null and the dashboard 500s.
+            ->with([
+                'student' => fn ($q) => $q->withTrashed()->select('id', 'name', 'avatar_path', 'deleted_at'),
+                'student.studentProfile:user_id,is_regular',
+            ])
             ->where('instructor_id', $instructorId)
             ->settled()
             ->paidBetween($window->startDate(), $window->endDate())

@@ -130,18 +130,32 @@
 
                     <ul class="mt-3 flex flex-wrap gap-2">
                         @foreach ($unreported->take(10) as $session)
+                            @php
+                                // The report form only accepts a live student, so an
+                                // archived one is shown as a label rather than a link
+                                // into a 403.
+                                $linkable = $session->student && ! $session->student->trashed();
+                            @endphp
                             <li>
-                                <a href="{{ route('instructor.reports.create', [
-                                        'student_id' => $session->student_id,
-                                        'date' => $session->paid_date->toDateString(),
-                                    ]) }}"
-                                   class="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-warning-500/30 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-warning-400 transition hover:border-warning-500/60 hover:bg-gray-700">
-                                    {{ $session->student->name }}
-                                    @if ($session->student?->studentProfile && ! $session->student->studentProfile->is_regular)
-                                        <span class="badge-warning shrink-0">Trial</span>
-                                    @endif
-                                    <span class="numeric text-warning-400/60">{{ $session->paid_date->format('M j') }}</span>
-                                </a>
+                                @if ($linkable)
+                                    <a href="{{ route('instructor.reports.create', [
+                                            'student_id' => $session->student_id,
+                                            'date' => $session->paid_date->toDateString(),
+                                        ]) }}"
+                                       class="focus-ring inline-flex items-center gap-1.5 rounded-lg border border-warning-500/30 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-warning-400 transition hover:border-warning-500/60 hover:bg-gray-700">
+                                        {{ $session->student->name }}
+                                        @if ($session->student->studentProfile && ! $session->student->studentProfile->is_regular)
+                                            <span class="badge-warning shrink-0">Trial</span>
+                                        @endif
+                                        <span class="numeric text-warning-400/60">{{ $session->paid_date->format('M j') }}</span>
+                                    </a>
+                                @else
+                                    <span class="inline-flex items-center gap-1.5 rounded-lg border border-warning-500/30 bg-gray-800 px-2.5 py-1.5 text-xs font-medium text-warning-400/70">
+                                        {{ $session->student?->name ?? 'Deleted student' }}
+                                        <span class="badge-neutral shrink-0">Archived</span>
+                                        <span class="numeric text-warning-400/60">{{ $session->paid_date->format('M j') }}</span>
+                                    </span>
+                                @endif
                             </li>
                         @endforeach
 
