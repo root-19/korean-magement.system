@@ -7,12 +7,14 @@ use App\Enums\TeachingMethod;
 use Carbon\CarbonImmutable;
 
 /**
- * One settled session as it appears on a payslip.
+ * One settled session as it appears on a payslip, or a manual adjustment
+ * credited by an admin in place of one.
  */
 final class EarningsLine
 {
     public function __construct(
-        public readonly int $sessionId,
+        /** NULL for a manual adjustment, which has no session behind it. */
+        public readonly ?int $sessionId,
         public readonly int $studentId,
         public readonly string $studentName,
         public readonly ?TeachingMethod $teachingMethod,
@@ -31,7 +33,14 @@ final class EarningsLine
         public readonly bool $hasReport,
         /** Paid without a report because it predates the requirement. */
         public readonly bool $isHistorical,
+        /** Credited by hand, with the admin's reason; no session was changed. */
+        public readonly ?string $adjustmentNote = null,
     ) {}
+
+    public function isAdjustment(): bool
+    {
+        return $this->sessionId === null;
+    }
 
     public function isEarly(): bool
     {
@@ -48,6 +57,10 @@ final class EarningsLine
 
     public function statusLabel(): string
     {
+        if ($this->isAdjustment()) {
+            return __('Manual adjustment');
+        }
+
         if ($this->status === SessionStatus::Present) {
             return 'Present';
         }
@@ -61,6 +74,10 @@ final class EarningsLine
 
     public function statusBadgeClass(): string
     {
+        if ($this->isAdjustment()) {
+            return 'badge-brand';
+        }
+
         if ($this->status === SessionStatus::Present) {
             return 'badge-success';
         }

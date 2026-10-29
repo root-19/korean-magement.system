@@ -6,8 +6,11 @@ use App\Enums\PayoutStatus;
 use App\Enums\TeachingMethod;
 use App\Models\AuditLog;
 use App\Models\Payout;
+use App\Models\PayoutAdjustment;
+use App\Models\StudentProfile;
 use App\Models\User;
 use App\Support\PayoutWindow;
+use Carbon\CarbonImmutable;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -120,6 +123,99 @@ class PayoutService
 
             return $payout->refresh();
         });
+    }
+
+    /**
+     * Credit an instructor one paid class for a student without touching the
+     * student's sessions. Priced from the student's current profile, exactly
+     * as a settled session would be, and frozen at that amount.
+     *
+     * Refused once the week it falls in is marked paid: the money has left.
+     */
+    public function addAdjustment(
+        User $admin,
+        User $instructor,
+        User $student,
+        CarbonImmutable $paidDate,
+        string $note,
+    ): PayoutAdjustment {
+        return DB::transaction(function () use ($admin, $instructor, $student, $paidDate, $note) {
+            $this->guardNotPaid($instructor, PayoutWindow::forDate($paidDate));
+
+            $profile = StudentProfile::query()->where('user_id', $student->id)->first();
+
+            if ($profile === null) {
+                throw ValidationException::withMessages([
+                    'student_id' => __('That student has no profile to price the class from.'),
+                ]);
+            }
+
+            $adjustment = PayoutAdjustment::create([
+                'instructor_id' => $instructor->id,
+                'student_id' => $student->id,
+                'student_name' => $student->name,
+                'paid_date' => $paidDate->toDateString(),
+                'teaching_method' => $profile->teaching_method,
+                'learning_time' => (int) $profile->learning_time,
+                'amount' => $this->earnings->amountFor($profile->teaching_method, (int) $profile->learning_time),
+                'note' => $note,
+                'created_by' => $admin->id,
+            ]);
+
+            AuditLog::record(
+                action: 'payout.adjusted',
+                subject: $adjustment,
+                targetName: $instructor->name,
+                details: [
+                    'student' => $student->name,
+                    'paid_date' => $paidDate->toDateString(),
+                    'amount' => (float) $adjustment->amount,
+                    'note' => $note,
+                ],
+                userId: $admin->id,
+            );
+
+            return $adjustment;
+        });
+    }
+
+    /**
+     * Withdraw a manual adjustment. Refused once its week is marked paid.
+     */
+    public function removeAdjustment(User $admin, PayoutAdjustment $adjustment): void
+    {
+        DB::transaction(function () use ($admin, $adjustment) {
+            $this->guardNotPaid($adjustment->instructor, PayoutWindow::forDate($adjustment->paid_date));
+
+            AuditLog::record(
+                action: 'payout.adjustment_removed',
+                subject: $adjustment,
+                targetName: $adjustment->instructor?->name,
+                details: [
+                    'student' => $adjustment->student_name,
+                    'paid_date' => $adjustment->paid_date->toDateString(),
+                    'amount' => (float) $adjustment->amount,
+                ],
+                userId: $admin->id,
+            );
+
+            $adjustment->delete();
+        });
+    }
+
+    protected function guardNotPaid(User $instructor, PayoutWindow $window): void
+    {
+        $paid = Payout::query()
+            ->where('instructor_id', $instructor->id)
+            ->whereDate('week_start', $window->startDate())
+            ->paid()
+            ->exists();
+
+        if ($paid) {
+            throw ValidationException::withMessages([
+                'paid_date' => __('That week is already marked paid and cannot be adjusted.'),
+            ]);
+        }
     }
 
     /**

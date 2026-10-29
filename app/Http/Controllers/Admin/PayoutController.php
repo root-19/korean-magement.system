@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Admin\StorePayoutAdjustmentRequest;
 use App\Models\ClassSession;
 use App\Models\Payout;
+use App\Models\PayoutAdjustment;
 use App\Models\User;
 use App\Services\Earnings\EarningsCalculator;
 use App\Services\Earnings\PayoutService;
 use App\Support\PayoutWindow;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\View\View;
@@ -40,7 +43,14 @@ class PayoutController extends Controller
             ->whereBetween('paid_date', [$window->startDate(), $window->endDate()])
             ->whereNotNull('status')
             ->distinct()
-            ->pluck('instructor_id');
+            ->pluck('instructor_id')
+            ->merge(
+                PayoutAdjustment::query()
+                    ->whereBetween('paid_date', [$window->startDate(), $window->endDate()])
+                    ->distinct()
+                    ->pluck('instructor_id')
+            )
+            ->unique();
 
         $frozen = Payout::query()
             ->where('week_start', $window->startDate())
@@ -126,6 +136,62 @@ class PayoutController extends Controller
                 'skipped' => $result['skipped'],
             ],
         ));
+    }
+
+    /**
+     * Form to credit one paid class by hand, for a session that is missing or
+     * must not be altered.
+     */
+    public function createAdjustment(Request $request, User $instructor): View
+    {
+        $window = $request->filled('week')
+            ? PayoutWindow::forDate($request->query('week'))
+            : PayoutWindow::current();
+
+        return view('admin.payouts.adjustment', [
+            'instructor' => $instructor,
+            'window' => $window,
+            'students' => $instructor->students()
+                ->with('user')
+                ->get()
+                ->filter(fn ($profile) => $profile->user !== null)
+                ->sortBy(fn ($profile) => $profile->user->name)
+                ->values(),
+            'adjustments' => PayoutAdjustment::query()
+                ->where('instructor_id', $instructor->id)
+                ->whereBetween('paid_date', [$window->startDate(), $window->endDate()])
+                ->orderByDesc('paid_date')
+                ->get(),
+        ]);
+    }
+
+    public function storeAdjustment(StorePayoutAdjustmentRequest $request, User $instructor): RedirectResponse
+    {
+        $data = $request->validated();
+        $paidDate = CarbonImmutable::parse($data['paid_date']);
+
+        $adjustment = $this->payouts->addAdjustment(
+            admin: $request->user(),
+            instructor: $instructor,
+            student: User::withTrashed()->findOrFail($data['student_id']),
+            paidDate: $paidDate,
+            note: $data['note'],
+        );
+
+        return redirect()
+            ->route('admin.payouts.index', ['week' => PayoutWindow::forDate($paidDate)->startDate()])
+            ->with('success', __(':name: 1 paid class added for :student (:amount).', [
+                'name' => $instructor->name,
+                'student' => $adjustment->student_name,
+                'amount' => money($adjustment->amount),
+            ]));
+    }
+
+    public function destroyAdjustment(Request $request, PayoutAdjustment $adjustment): RedirectResponse
+    {
+        $this->payouts->removeAdjustment($request->user(), $adjustment);
+
+        return back()->with('success', __('Manual adjustment removed.'));
     }
 
     /**

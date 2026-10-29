@@ -133,6 +133,13 @@
 
                                 <td class="text-right">
                                     <div class="flex justify-end gap-1.5">
+                                        @if (! $payout || $payout->status === App\Enums\PayoutStatus::Pending)
+                                            <a href="{{ route('admin.payouts.adjustments.create', ['instructor' => $instructor, 'week' => $window->startDate()]) }}"
+                                               class="btn-ghost btn-sm" title="{{ __('Add a paid class by hand') }}">
+                                                {{ __('Add class') }}
+                                            </a>
+                                        @endif
+
                                         @if (! $payout)
                                             <form method="POST" action="{{ route('admin.payouts.finalise', $instructor) }}">
                                                 @csrf

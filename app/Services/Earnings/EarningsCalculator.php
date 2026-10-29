@@ -6,6 +6,7 @@ use App\Enums\Party;
 use App\Enums\SessionStatus;
 use App\Enums\TeachingMethod;
 use App\Models\ClassSession;
+use App\Models\PayoutAdjustment;
 use App\Support\PayoutWindow;
 use Carbon\CarbonImmutable;
 use Illuminate\Database\Eloquent\Builder;
@@ -60,6 +61,12 @@ use Illuminate\Support\Facades\DB;
  *      intact. A session with no profile row at all is not a trial — it is
  *      corrupt data — and keeps its old treatment.
  *
+ *   8. A MANUAL ADJUSTMENT (`payout_adjustments`) is a paid class credited by
+ *      an admin without a session behind it — for a class whose attendance
+ *      row was lost or must not be altered. It pays its stored amount in the
+ *      week of its paid_date, is never gated on a report, and is never a
+ *      deduction.
+ *
  * WHAT IS GONE
  * ------------
  * The legacy query carried two pieces of machinery that the new schema retires:
@@ -86,14 +93,10 @@ class EarningsCalculator
     {
         $window ??= PayoutWindow::current();
 
-        $rows = $this->query($instructorId, $window->startDate(), $window->endDate())->get();
-
-        $lines = $rows
-            ->map(fn (object $row) => $this->toLine($row))
-            ->filter()
-            ->values();
-
-        return new EarningsSummary($window, $lines);
+        return new EarningsSummary(
+            $window,
+            $this->lines($instructorId, $window->startDate(), $window->endDate())
+        );
     }
 
     /**
@@ -104,10 +107,7 @@ class EarningsCalculator
     {
         $summary = new EarningsSummary(
             PayoutWindow::forDate($start),
-            $this->query($instructorId, $start, $end)->get()
-                ->map(fn (object $row) => $this->toLine($row))
-                ->filter()
-                ->values()
+            $this->lines($instructorId, $start, $end)
         );
 
         return $summary->net();
@@ -123,6 +123,31 @@ class EarningsCalculator
     }
 
     // ---------------------------------------------------------------- internals
+
+    /**
+     * Settled sessions plus manual adjustments for a date range, as payslip
+     * lines, newest first.
+     *
+     * @return Collection<int, EarningsLine>
+     */
+    protected function lines(int $instructorId, string $start, string $end): Collection
+    {
+        $sessions = $this->query($instructorId, $start, $end)->get()
+            ->map(fn (object $row) => $this->toLine($row))
+            ->filter();
+
+        $adjustments = PayoutAdjustment::query()
+            ->where('instructor_id', $instructorId)
+            ->whereBetween('paid_date', [$start, $end])
+            ->orderByDesc('paid_date')
+            ->get()
+            ->map(fn (PayoutAdjustment $adjustment) => $this->adjustmentLine($adjustment));
+
+        return $sessions
+            ->concat($adjustments)
+            ->sortByDesc(fn (EarningsLine $line) => $line->paidDate->toDateString())
+            ->values();
+    }
 
     /**
      * The one query. Returns every settled session in range that either pays or
@@ -258,6 +283,32 @@ class EarningsCalculator
             isDeduction: $status === SessionStatus::Absent && $absentBy === Party::Teacher->value,
             hasReport: (bool) ($row->has_report ?? false),
             isHistorical: $paidDate->toDateString() < $this->feedbackRequiredFrom(),
+        );
+    }
+
+    /**
+     * Rule 8. The amount was fixed when the adjustment was made, so a later
+     * rate change does not restate it.
+     */
+    protected function adjustmentLine(PayoutAdjustment $adjustment): EarningsLine
+    {
+        $paidDate = CarbonImmutable::parse($adjustment->paid_date);
+
+        return new EarningsLine(
+            sessionId: null,
+            studentId: (int) ($adjustment->student_id ?? 0),
+            studentName: $adjustment->student_name,
+            teachingMethod: $adjustment->teaching_method,
+            learningTime: $adjustment->learning_time,
+            status: SessionStatus::Present,
+            absentBy: null,
+            paidDate: $paidDate,
+            scheduledDate: $paidDate,
+            amount: (float) $adjustment->amount,
+            isDeduction: false,
+            hasReport: true,
+            isHistorical: false,
+            adjustmentNote: $adjustment->note,
         );
     }
 

@@ -154,6 +154,9 @@
 
                                         <td>
                                             <span class="{{ $line->statusBadgeClass() }}">{{ $line->statusLabel() }}</span>
+                                            @if ($line->isAdjustment())
+                                                <span class="mt-0.5 block text-xs text-gray-500">{{ $line->adjustmentNote }}</span>
+                                            @endif
                                         </td>
 
                                         <td @class([

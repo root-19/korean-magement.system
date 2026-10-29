@@ -69,7 +69,12 @@
                                             {{ $line->teachingMethod?->label() ?? __('Unspecified') }}
                                             <span class="numeric text-xs text-gray-500">{{ $line->learningTime }}m</span>
                                         </td>
-                                        <td><span class="{{ $line->statusBadgeClass() }}">{{ $line->statusLabel() }}</span></td>
+                                        <td>
+                                            <span class="{{ $line->statusBadgeClass() }}">{{ $line->statusLabel() }}</span>
+                                            @if ($line->isAdjustment())
+                                                <span class="mt-0.5 block text-xs text-gray-500">{{ $line->adjustmentNote }}</span>
+                                            @endif
+                                        </td>
                                         <td @class([
                                             'numeric whitespace-nowrap text-right font-medium',
                                             'text-danger-400' => $line->isDeduction,
