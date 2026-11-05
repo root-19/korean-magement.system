@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Admin;
 
 use App\Enums\EnrollmentStatus;
+use App\Enums\Party;
 use App\Http\Controllers\Controller;
 use App\Models\StudentProfile;
 use App\Services\Enrollment\EnrollmentService;
@@ -27,7 +28,12 @@ class EnrollmentController extends Controller
 
         $enrollments = StudentProfile::query()
             ->with([
-                'user:id,name,email,phone,avatar_path,is_active,created_at',
+                // The card shows the plan the student applied for, and
+                // sessionsPurchased() needs the student-absent count to add
+                // back in: counted here so it is not a query per row.
+                'user' => fn ($query) => $query
+                    ->select('id', 'name', 'email', 'phone', 'avatar_path', 'is_active', 'created_at')
+                    ->withCount(['attendedSessions as student_absent_count' => fn ($q) => $q->absentBy(Party::Student)]),
                 'user.schedules',
                 'instructor:id,name',
                 // Eager-loaded so the "decided by" line is not a query per row.

@@ -63,7 +63,7 @@
                                 @foreach ([
                                     __('Type') => $enrollment->teaching_method?->label() ?? '—',
                                     __('Duration') => $enrollment->learning_time ? __(':minutes min', ['minutes' => $enrollment->learning_time]) : '—',
-                                    __('Sessions') => $enrollment->sessions_remaining,
+                                    __('Sessions') => $enrollment->sessionsPurchased((int) ($student?->student_absent_count ?? 0)),
                                     __('Starts') => $enrollment->start_date?->translatedFormat('M j, Y') ?? '—',
                                 ] as $label => $value)
                                     <div>

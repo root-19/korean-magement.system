@@ -237,7 +237,7 @@ class EarningsCalculator
      * imported from the legacy `feedback` table cannot always be resolved to a
      * session. The unique index on those three columns makes it an index lookup.
      */
-    protected function reportExists(): \Closure
+    public function reportExists(): \Closure
     {
         return function (QueryBuilder $q) {
             $q->select(DB::raw(1))
@@ -324,7 +324,7 @@ class EarningsCalculator
         return round($learningTimeMinutes / 60 * $rate, 2);
     }
 
-    protected function feedbackRequiredFrom(): string
+    public function feedbackRequiredFrom(): string
     {
         return (string) config('academy.feedback_required_from', '2024-01-01');
     }
@@ -339,7 +339,7 @@ class EarningsCalculator
         return $from === '' ? null : $from;
     }
 
-    protected function isFeedbackExempt(int $instructorId): bool
+    public function isFeedbackExempt(int $instructorId): bool
     {
         return in_array(
             $instructorId,

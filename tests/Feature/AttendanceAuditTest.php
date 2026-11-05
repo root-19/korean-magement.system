@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Enums\EnrollmentStatus;
 use App\Enums\TeachingMethod;
 use App\Models\ClassSession;
+use App\Models\SessionReport;
 use App\Models\StudentProfile;
 use App\Models\User;
 use App\Services\Earnings\EarningsCalculator;
@@ -122,8 +123,7 @@ class AttendanceAuditTest extends TestCase
             'student_absent' => 1,
             'teacher_absent' => 1,
             'postponed' => 1,
-            'total_minutes' => 5 * 25 + 2 * 50,
-            'used_minutes' => 3 * 25 + 1 * 50,
+            'total_minutes' => 3 * 25 + 1 * 50,
         ], array_diff_key($totals, array_flip(['gross', 'deductions', 'earned', 'by_method'])));
     }
 
@@ -143,20 +143,67 @@ class AttendanceAuditTest extends TestCase
         $ben = $view->viewData('teachers')->firstWhere('name', 'Teacher Ben');
 
         $this->assertSame([
-            'audio' => ['total' => 125 + 20, 'used' => 75 + 20],
-            'video_kids' => ['total' => 60, 'used' => 30],
-            'video_adults' => ['total' => 100, 'used' => 50],
+            'audio' => 75 + 20,
+            'video_kids' => 30,
+            'video_adults' => 50,
         ], $byMethod);
 
-        $this->assertSame(['total' => 20, 'used' => 20], $ben['by_method']['audio']);
-        $this->assertSame(['total' => 60, 'used' => 30], $ben['by_method']['video_kids']);
+        $this->assertSame(20, $ben['by_method']['audio']);
+        $this->assertSame(30, $ben['by_method']['video_kids']);
         $this->assertSame(
-            array_sum(array_column($ben['by_method'], 'total')),
+            array_sum($ben['by_method']),
             $ben['total_minutes'],
             'the three types add up to the total',
         );
 
         $view->assertSee('Video (Kids) minutes')->assertSee('Video (Adults) minutes')->assertSee('Audio minutes');
+    }
+
+    #[Test]
+    public function a_present_class_counts_only_once_its_report_is_filed(): void
+    {
+        // The report rule is on for this cut-off: a Present slot with no report
+        // is still being consumed, so it stays off Present and the minutes.
+        config(['academy.feedback_required_from' => '2026-01-01']);
+
+        $reported = $this->student($this->ben, 40, TeachingMethod::Audio);
+        $this->classOn($this->ben, $reported, '2026-09-14')->present()->create();
+        SessionReport::factory()->create([
+            'instructor_id' => $this->ben->id,
+            'student_id' => $reported->id,
+            'class_date' => '2026-09-14',
+        ]);
+
+        $view = $this->page();
+        $ben = $view->viewData('teachers')->firstWhere('name', 'Teacher Ben');
+        $totals = $view->viewData('totals');
+        $daily = collect($view->viewData('daily'))->keyBy(fn (array $day) => $day['date']->toDateString());
+
+        $this->assertSame(1, $ben['present']);
+        $this->assertSame(40, $ben['total_minutes']);
+        $this->assertSame(40, $ben['by_method']['audio']);
+        $this->assertSame(1, $ben['absent'], 'absences are not gated on a report');
+
+        $this->assertSame(1, $totals['present']);
+        $this->assertSame(40, $totals['total_minutes']);
+        $this->assertSame(['audio' => 40, 'video_kids' => 0, 'video_adults' => 0], $totals['by_method']);
+
+        $this->assertSame(1, $daily['2026-09-14']['present']);
+        $this->assertSame(0, $daily['2026-09-13']['present'], "Ben's unreported class is off the chart");
+    }
+
+    #[Test]
+    public function an_exempt_teacher_counts_without_a_report(): void
+    {
+        config([
+            'academy.feedback_required_from' => '2026-01-01',
+            'academy.feedback_exempt_instructor_ids' => [$this->ana->id],
+        ]);
+
+        $teachers = $this->page()->viewData('teachers')->keyBy('name');
+
+        $this->assertSame(3, $teachers['Teacher Ana']['present']);
+        $this->assertSame(0, $teachers['Teacher Ben']['present']);
     }
 
     #[Test]
@@ -203,12 +250,12 @@ class AttendanceAuditTest extends TestCase
         $this->assertSame(['Teacher Ana', 'Teacher Ben'], $teachers->pluck('name')->all());
 
         $this->assertSame(
-            ['present' => 3, 'absent' => 1, 'postponed' => 1, 'total_minutes' => 125, 'used_minutes' => 75],
-            array_intersect_key($teachers[0], array_flip(['present', 'absent', 'postponed', 'total_minutes', 'used_minutes'])),
+            ['present' => 3, 'absent' => 1, 'postponed' => 1, 'total_minutes' => 75],
+            array_intersect_key($teachers[0], array_flip(['present', 'absent', 'postponed', 'total_minutes'])),
         );
         $this->assertSame(
-            ['present' => 1, 'absent' => 1, 'postponed' => 0, 'total_minutes' => 100, 'used_minutes' => 50],
-            array_intersect_key($teachers[1], array_flip(['present', 'absent', 'postponed', 'total_minutes', 'used_minutes'])),
+            ['present' => 1, 'absent' => 1, 'postponed' => 0, 'total_minutes' => 50],
+            array_intersect_key($teachers[1], array_flip(['present', 'absent', 'postponed', 'total_minutes'])),
         );
     }
 
