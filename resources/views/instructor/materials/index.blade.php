@@ -3,17 +3,19 @@
 @section('title', 'Learning Materials')
 @section('heading', 'Learning Materials')
 @section('subheading', $materials === null
-    ? 'Teaching resources published by the academy'
+    ? 'Teaching resources from the academy and your colleagues'
     : $folderLabel)
 
 @section('content')
     @if ($materials === null)
         {{-- ─────────────────────────────────────────────── Folder list ───── --}}
+        @include('instructor.materials._upload-form', ['selectedFolder' => null])
+
         @if ($folders->isEmpty() && $looseCount === 0)
             <x-card>
                 <x-empty-state icon="book-open"
-                               title="No materials published yet"
-                               message="When the academy posts a teaching resource it appears here, ready to download." />
+                               title="No materials posted yet"
+                               message="Post the first one above, or wait for the academy to publish a teaching resource here." />
             </x-card>
         @else
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -66,11 +68,13 @@
             All folders
         </a>
 
+        @include('instructor.materials._upload-form', ['selectedFolder' => $folder?->id])
+
         @if ($materials->isEmpty())
             <x-card>
                 <x-empty-state icon="book-open"
                                title="Nothing in {{ $folderLabel }} yet"
-                               message="Materials published into this folder will appear here." />
+                               message="Post a material into this folder above and it appears here." />
             </x-card>
         @else
             <div class="grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
@@ -90,6 +94,16 @@
                                         · <span class="numeric">{{ $material->published_at->format('M j, Y') }}</span>
                                     @endif
                                 </p>
+
+                                {{-- Who posted it: the shelf now mixes the academy's
+                                     resources with the instructors' own. --}}
+                                @if ($material->uploader)
+                                    <p class="mt-0.5 truncate text-xs text-gray-500">
+                                        {{ $material->wasPostedBy(auth()->user())
+                                            ? __('Posted by you')
+                                            : __('by :name', ['name' => $material->uploader->name]) }}
+                                    </p>
+                                @endif
                             </div>
                         </div>
 
@@ -97,11 +111,28 @@
                             <p class="mt-3 flex-1 text-sm text-gray-300">{{ $material->description }}</p>
                         @endif
 
-                        <a href="{{ route('instructor.materials.download', $material) }}"
-                           class="btn-secondary mt-4 w-full">
-                            <x-icon name="download" class="h-4 w-4" />
-                            Download
-                        </a>
+                        <div class="mt-4 flex items-center gap-2">
+                            <a href="{{ route('instructor.materials.download', $material) }}"
+                               class="btn-secondary flex-1">
+                                <x-icon name="download" class="h-4 w-4" />
+                                Download
+                            </a>
+
+                            {{-- Only what this instructor posted. Deleting takes the
+                                 PDF off disk too, so it is confirmed first. --}}
+                            @if ($material->wasPostedBy(auth()->user()))
+                                <form method="POST"
+                                      action="{{ route('instructor.materials.destroy', $material) }}"
+                                      onsubmit="return confirm(@js(__('Delete “:title” and its PDF? This cannot be undone.', ['title' => $material->title])))">
+                                    @csrf
+                                    @method('DELETE')
+                                    <button type="submit" class="btn-ghost !px-2.5"
+                                            aria-label="{{ __('Delete :title', ['title' => $material->title]) }}">
+                                        <x-icon name="trash" class="h-4 w-4" />
+                                    </button>
+                                </form>
+                            @endif
+                        </div>
                     </x-card>
                 @endforeach
             </div>

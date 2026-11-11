@@ -24,6 +24,9 @@ class LearningMaterial extends Model
     /** Where on that disk. */
     public const DIRECTORY = 'learning-materials';
 
+    /** Upload ceiling in kilobytes. 20 MB is generous for a PDF and small enough to survive a shared host. */
+    public const MAX_KILOBYTES = 20480;
+
     protected $fillable = [
         'folder_id',
         'title',
@@ -64,6 +67,16 @@ class LearningMaterial extends Model
     }
 
     // ------------------------------------------------------------------ helpers
+
+    /**
+     * Whether this user posted the material — the one person, besides an
+     * admin, who may take it down. The delete action and the button that
+     * reaches it both ask this, so the rule lives in one place.
+     */
+    public function wasPostedBy(?User $user): bool
+    {
+        return $user !== null && $this->uploaded_by !== null && $this->uploaded_by === $user->id;
+    }
 
     /**
      * Delete the file behind this material. Called before the row goes.

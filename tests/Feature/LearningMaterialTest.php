@@ -49,8 +49,12 @@ class LearningMaterialTest extends TestCase
      * endpoint: posting leaves a success flash naming the material, which the
      * next page would render and defeat an assertDontSee.
      */
-    private function makeMaterial(bool $published, string $title, string $name = 'file.pdf'): LearningMaterial
-    {
+    private function makeMaterial(
+        bool $published,
+        string $title,
+        string $name = 'file.pdf',
+        ?User $uploader = null,
+    ): LearningMaterial {
         $path = LearningMaterial::DIRECTORY.'/'.md5($title).'.pdf';
 
         Storage::disk(LearningMaterial::DISK)->put($path, '%PDF-1.4 fake');
@@ -61,7 +65,7 @@ class LearningMaterialTest extends TestCase
             'file_path' => $path,
             'original_name' => $name,
             'file_size' => 1024,
-            'uploaded_by' => $this->admin->id,
+            'uploaded_by' => ($uploader ?? $this->admin)->id,
             'is_published' => $published,
             'published_at' => $published ? now() : null,
         ]);
@@ -394,6 +398,131 @@ class LearningMaterialTest extends TestCase
 
         $this->assertSame(1, LearningMaterial::count());
         Storage::disk(LearningMaterial::DISK)->assertExists($material->file_path);
+    }
+
+    // ------------------------------------------------- instructor uploads
+
+    #[Test]
+    public function an_instructor_can_post_a_material_and_it_is_published_at_once(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.store'), $this->payload())
+            ->assertRedirect();
+
+        $material = LearningMaterial::firstOrFail();
+
+        $this->assertSame($this->instructor->id, $material->uploaded_by);
+
+        // No draft step for an instructor: it is on the shelf immediately.
+        $this->assertTrue($material->is_published);
+        $this->assertNotNull($material->published_at);
+
+        Storage::disk(LearningMaterial::DISK)->assertExists($material->file_path);
+    }
+
+    #[Test]
+    public function an_instructor_upload_is_visible_to_other_instructors_and_students(): void
+    {
+        // Written straight to the database rather than posted: posting leaves a
+        // success flash naming the material, which the next page would render
+        // and turn these assertions into false positives.
+        $this->makeMaterial(true, 'Phrasal verbs pack', uploader: $this->instructor);
+
+        $colleague = User::factory()->instructor()->create();
+        $student = User::factory()->student()->create();
+
+        $this->actingAs($colleague)
+            ->get(route('instructor.materials.index', ['folder' => 'none']))
+            ->assertOk()
+            ->assertSee('Phrasal verbs pack');
+
+        $this->actingAs($student)
+            ->get(route('student.dashboard'))
+            ->assertOk()
+            ->assertSee('Phrasal verbs pack');
+    }
+
+    #[Test]
+    public function an_instructor_upload_must_be_a_pdf(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.store'), $this->payload([
+                'file' => UploadedFile::fake()->create('notes.docx', 40, 'application/msword'),
+            ]))
+            ->assertSessionHasErrors('file');
+
+        $this->assertSame(0, LearningMaterial::count());
+    }
+
+    #[Test]
+    public function an_instructor_can_delete_what_they_posted(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.store'), $this->payload());
+
+        $material = LearningMaterial::firstOrFail();
+        $path = $material->file_path;
+
+        $this->actingAs($this->instructor)
+            ->delete(route('instructor.materials.destroy', $material))
+            ->assertRedirect();
+
+        $this->assertSame(0, LearningMaterial::count());
+        Storage::disk(LearningMaterial::DISK)->assertMissing($path);
+    }
+
+    #[Test]
+    public function an_instructor_cannot_delete_someone_elses_material(): void
+    {
+        // One posted by an admin, one by a colleague: neither is theirs.
+        $adminMaterial = $this->makeMaterial(true, 'Academy handbook');
+
+        $colleague = User::factory()->instructor()->create();
+
+        $colleagueMaterial = $this->makeMaterial(true, 'Colleague pack', uploader: $colleague);
+
+        foreach ([$adminMaterial, $colleagueMaterial] as $material) {
+            $this->actingAs($this->instructor)
+                ->delete(route('instructor.materials.destroy', $material))
+                ->assertForbidden();
+
+            Storage::disk(LearningMaterial::DISK)->assertExists($material->file_path);
+        }
+
+        $this->assertSame(2, LearningMaterial::count());
+    }
+
+    #[Test]
+    public function an_instructor_can_post_into_an_existing_folder_but_cannot_invent_one(): void
+    {
+        $folder = LearningMaterialFolder::create([
+            'name' => 'Grammar drills',
+            'created_by' => $this->admin->id,
+        ]);
+
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.store'), $this->payload(['folder_id' => $folder->id]))
+            ->assertRedirect();
+
+        $this->assertSame($folder->id, LearningMaterial::firstOrFail()->folder_id);
+
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.store'), $this->payload(['folder_id' => $folder->id + 999]))
+            ->assertSessionHasErrors('folder_id');
+
+        $this->assertSame(1, LearningMaterial::count());
+    }
+
+    #[Test]
+    public function a_student_cannot_post_a_material(): void
+    {
+        $student = User::factory()->student()->create();
+
+        $this->actingAs($student)
+            ->post(route('instructor.materials.store'), $this->payload())
+            ->assertForbidden();
+
+        $this->assertSame(0, LearningMaterial::count());
     }
 
     // -------------------------------------------------------------------- menus

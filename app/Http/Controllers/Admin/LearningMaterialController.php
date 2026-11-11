@@ -19,9 +19,6 @@ use Illuminate\View\View;
  */
 class LearningMaterialController extends Controller
 {
-    /** Bytes. 20 MB is generous for a PDF and small enough to survive a shared host. */
-    private const MAX_KILOBYTES = 20480;
-
     public function index(): View
     {
         return view('admin.materials.index', [
@@ -44,7 +41,7 @@ class LearningMaterialController extends Controller
 
             // mimetypes checks the file's reported content type, not just the
             // extension, so a renamed .exe does not pass.
-            'file' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'max:'.self::MAX_KILOBYTES],
+            'file' => ['required', 'file', 'mimes:pdf', 'mimetypes:application/pdf', 'max:'.LearningMaterial::MAX_KILOBYTES],
 
             'is_published' => ['nullable', 'boolean'],
 

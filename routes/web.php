@@ -126,12 +126,18 @@ Route::middleware(['auth', 'role:instructor,admin'])
         Route::post('/classes/evaluation', [ClassSessionController::class, 'requestEvaluation'])
             ->name('classes.evaluation');
 
-        // Learning materials published by an admin. The PDF is served by the
-        // controller, not by the web server, so it stays behind auth.
+        // Learning materials — the academy's, and the instructor's own. The PDF
+        // is served by the controller, not by the web server, so it stays
+        // behind auth. An instructor upload is published on the spot; delete is
+        // limited to what that instructor posted.
         Route::get('/learning-materials', [LearningMaterialController::class, 'index'])
             ->name('materials.index');
+        Route::post('/learning-materials', [LearningMaterialController::class, 'store'])
+            ->name('materials.store');
         Route::get('/learning-materials/{material}/download', [LearningMaterialController::class, 'download'])
             ->name('materials.download');
+        Route::delete('/learning-materials/{material}', [LearningMaterialController::class, 'destroy'])
+            ->name('materials.destroy');
 
         // Earnings
         Route::get('/earnings', [EarningsController::class, 'index'])->name('earnings.index');
