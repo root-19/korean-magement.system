@@ -134,6 +134,12 @@ Route::middleware(['auth', 'role:instructor,admin'])
             ->name('materials.index');
         Route::post('/learning-materials', [LearningMaterialController::class, 'store'])
             ->name('materials.store');
+
+        // Categories are shared with the admin side, so an instructor may add
+        // one but not remove it — deleting a category moves other people's
+        // materials, which stays an admin decision.
+        Route::post('/material-folders', [LearningMaterialController::class, 'storeFolder'])
+            ->name('materials.folders.store');
         Route::get('/learning-materials/{material}/download', [LearningMaterialController::class, 'download'])
             ->name('materials.download');
         Route::delete('/learning-materials/{material}', [LearningMaterialController::class, 'destroy'])

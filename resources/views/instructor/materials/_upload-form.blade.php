@@ -1,20 +1,25 @@
 {{--
-    Post a material of your own.
+    Post a material of your own, and add a category to put it in.
 
     Collapsed by default so the shelf stays the point of the page; it opens
-    itself when a submission comes back with errors, and when the instructor
-    is already inside a folder that folder is preselected.
+    itself when a submission comes back with errors or straight after a category
+    is created, and when the instructor is already inside a folder that folder
+    is preselected.
+
+    The two forms are siblings, not nested — a form inside a form is invalid
+    HTML and the inner one would never submit.
 
     Expects: $folderOptions, and $selectedFolder (a folder id or null).
 --}}
 @php
-    $hasErrors = $errors->hasAny(['title', 'description', 'file', 'folder_id']);
+    $hasErrors = $errors->hasAny(['title', 'description', 'file', 'folder_id', 'name']);
+    $startOpen = $hasErrors || session('openMaterialForm');
     $selectedFolder = old('folder_id', $selectedFolder ?? null);
     $maxMegabytes = (int) (\App\Models\LearningMaterial::MAX_KILOBYTES / 1024);
 @endphp
 
 <x-card class="mb-4">
-    <details class="group" @if ($hasErrors) open @endif>
+    <details class="group" @if ($startOpen) open @endif>
         <summary class="focus-ring flex cursor-pointer items-center gap-3 rounded">
             <span class="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg bg-brand-500/15 text-brand-400">
                 <x-icon name="plus" class="h-5 w-5" />
@@ -94,6 +99,34 @@
             </div>
 
             <button type="submit" class="btn-primary w-full sm:w-auto">{{ __('Post material') }}</button>
+        </form>
+
+        {{-- A sibling of the upload form, never nested inside it. Creating a
+             category lands back here with it already chosen. --}}
+        <form method="POST"
+              action="{{ route('instructor.materials.folders.store') }}"
+              class="mt-4 border-t border-gray-700 pt-4">
+            @csrf
+
+            <label for="folder-name" class="form-label">{{ __('New category') }}</label>
+
+            <div class="flex gap-2">
+                <input id="folder-name"
+                       name="name"
+                       type="text"
+                       value="{{ old('name') }}"
+                       required
+                       maxlength="120"
+                       class="form-input"
+                       placeholder="{{ __('e.g. Grammar drills') }}">
+                <button type="submit" class="btn-secondary shrink-0">{{ __('Add') }}</button>
+            </div>
+
+            @error('name') <p class="form-error">{{ $message }}</p> @enderror
+
+            <p class="mt-1.5 text-xs text-gray-500">
+                {{ __('Shared with every instructor. Only an admin can remove one.') }}
+            </p>
         </form>
     </details>
 </x-card>

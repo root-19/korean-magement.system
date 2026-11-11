@@ -514,6 +514,85 @@ class LearningMaterialTest extends TestCase
     }
 
     #[Test]
+    public function an_instructor_can_create_a_category(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.folders.store'), ['name' => 'Listening practice'])
+            ->assertRedirect();
+
+        $folder = LearningMaterialFolder::where('name', 'Listening practice')->firstOrFail();
+
+        $this->assertSame($this->instructor->id, $folder->created_by);
+    }
+
+    #[Test]
+    public function a_new_category_is_shared_with_everyone(): void
+    {
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.folders.store'), ['name' => 'Listening practice']);
+
+        $folder = LearningMaterialFolder::where('name', 'Listening practice')->firstOrFail();
+
+        // A colleague may post into it, and the admin page lists it.
+        $colleague = User::factory()->instructor()->create();
+
+        $this->actingAs($colleague)
+            ->post(route('instructor.materials.store'), $this->payload(['folder_id' => $folder->id]))
+            ->assertRedirect();
+
+        $this->assertSame($folder->id, LearningMaterial::firstOrFail()->folder_id);
+
+        $this->actingAs($this->admin)
+            ->get(route('admin.materials.index'))
+            ->assertOk()
+            ->assertSee('Listening practice');
+    }
+
+    #[Test]
+    public function a_category_name_must_be_unique(): void
+    {
+        LearningMaterialFolder::create([
+            'name' => 'Grammar drills',
+            'created_by' => $this->admin->id,
+        ]);
+
+        $this->actingAs($this->instructor)
+            ->post(route('instructor.materials.folders.store'), ['name' => 'Grammar drills'])
+            ->assertSessionHasErrors('name');
+
+        $this->assertSame(1, LearningMaterialFolder::count());
+    }
+
+    #[Test]
+    public function an_instructor_cannot_remove_a_category(): void
+    {
+        $folder = LearningMaterialFolder::create([
+            'name' => 'Grammar drills',
+            'created_by' => $this->instructor->id,
+        ]);
+
+        // Even one they created themselves: it can hold other people's
+        // materials, so removing it stays an admin decision.
+        $this->actingAs($this->instructor)
+            ->delete(route('admin.materials.folders.destroy', $folder))
+            ->assertForbidden();
+
+        $this->assertSame(1, LearningMaterialFolder::count());
+    }
+
+    #[Test]
+    public function a_student_cannot_create_a_category(): void
+    {
+        $student = User::factory()->student()->create();
+
+        $this->actingAs($student)
+            ->post(route('instructor.materials.folders.store'), ['name' => 'Listening practice'])
+            ->assertForbidden();
+
+        $this->assertSame(0, LearningMaterialFolder::count());
+    }
+
+    #[Test]
     public function a_student_cannot_post_a_material(): void
     {
         $student = User::factory()->student()->create();

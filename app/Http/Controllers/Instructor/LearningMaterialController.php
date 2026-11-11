@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Instructor;
 
 use App\Http\Controllers\Controller;
+use App\Http\Requests\Instructor\StoreLearningMaterialFolderRequest;
 use App\Http\Requests\Instructor\StoreLearningMaterialRequest;
 use App\Models\AuditLog;
 use App\Models\LearningMaterial;
@@ -21,6 +22,10 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
  * one — so it reaches the other instructors and the student dashboard as soon
  * as it is saved. They may delete what they posted and nothing else; an
  * admin-posted material, or another instructor's, goes through the admin page.
+ *
+ * They may also add a category. Categories are shared with everybody, so a new
+ * one shows up for every instructor and on the admin page; removing one is left
+ * to an admin, since it can hold other people's materials.
  */
 class LearningMaterialController extends Controller
 {
@@ -78,6 +83,40 @@ class LearningMaterialController extends Controller
                 ->latest('id')
                 ->get(),
         ]);
+    }
+
+    /**
+     * Add a category to the library.
+     *
+     * Categories are shared, so a new one is on offer to every instructor and
+     * on the admin page at once — the same folders an admin creates, not a
+     * private set. Removing one stays with the admin: a category can hold other
+     * people's materials, and dropping it moves all of them to Uncategorised.
+     *
+     * Lands inside the new category rather than back on the shelf, with the
+     * upload form open and that category already chosen: creating one is
+     * almost always the first half of posting into it.
+     */
+    public function storeFolder(StoreLearningMaterialFolderRequest $request): RedirectResponse
+    {
+        $folder = LearningMaterialFolder::create(
+            $request->validated() + ['created_by' => $request->user()->id]
+        );
+
+        AuditLog::record(
+            action: 'material_folder.created',
+            subject: $folder,
+            targetName: $folder->name,
+            details: ['by_instructor' => true],
+            userId: $request->user()->id,
+        );
+
+        return redirect()
+            ->route('instructor.materials.index', ['folder' => $folder->id])
+            ->with('success', __('Category ":name" created. Post your first material into it.', [
+                'name' => $folder->name,
+            ]))
+            ->with('openMaterialForm', true);
     }
 
     /**
